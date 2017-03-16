@@ -1,0 +1,152 @@
+counter += 1;
+ 
+  //Read the current weight
+  double backWeight = backwardScale.get_units();
+  double forwardWeight = forwardScale.get_units();
+  RIDERWEIGHT = forwardWeight + backWeight;
+
+  //MASSIVE PRINT STATEMENT
+  if (counter % 4 == 0){
+  Serial.print(backWeight, 2);
+  Serial.print(",");
+  Serial.print(forwardWeight, 2); //scale.get_units() returns a float
+  Serial.print(",");
+  Serial.println();
+//        Serial.print("DUTY RATE: ");
+//      Serial.println(dutyRate);
+//  Serial.print(dutyRate);
+  Serial.println();
+//  // Print the heading and orientation for fun!
+//  // Call print attitude. The LSM9DS1's magnetometer x and y
+//  // axes are opposite to the accelerometer, so my and mx are
+//  // substituted for each other.
+//  printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
+//  Serial.println();
+//  Serial.println();
+//  Serial.println(forwardWeight);
+//  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
+//  printAccel(); // Print "A: ax, ay, az"
+  }
+
+  //If rider isn't on, don't run the motor
+  if (RIDERWEIGHT < 70){
+    dutyRate = BASEDUTY;
+    riderIsOn = false;
+    Serial.println("CLOSED");
+  }
+  else if (RIDERWEIGHT > 100 && !riderIsOn){
+    riderIsOn = true;
+    startTime = millis();
+    Serial.println("STARTED ENGINE");
+  }
+
+  //If rider is on, calculate the right speed
+  else {
+    double maxWeight = forwardWeight;
+    boolean maxIsForward = true;
+
+    //Calculate which direction rider is leaning
+    if (backWeight > forwardWeight){
+      maxWeight = backWeight;
+      maxIsForward = false;
+    }
+
+    //Check if rider is in neutral position
+    if (maxWeight < .55*RIDERWEIGHT){
+      int blah = 0;
+      dutyRate = BASEDUTY;
+//      Serial.println("RIDER IS NEUTRAL");
+    }
+
+    //If not, drive the motor
+    else {
+      //Calculate the current pulse width
+      double speedFraction = 0;
+      int extraPulseWidth = 0;
+      if (maxIsForward){
+        speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.32*RIDERWEIGHT);
+        
+      }
+      else {
+        speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.25*RIDERWEIGHT);
+        
+//        Serial.print("SPEED FRAC");
+//        Serial.println(speedFraction);
+      }
+//      Serial.println(speedFraction);
+      if (speedFraction > 1) speedFraction = 1.0;
+//      Serial.print("SPEEDS: ");
+//      Serial.print(speedFraction);
+//      Serial.print(", ");
+      speedFraction = pow(speedFraction, 1);
+//      Serial.println(speedFraction);
+//      Serial.print("Pulse Width");
+//      Serial.println(extraPulseWidth);
+      
+      if (maxIsForward){
+        extraPulseWidth = .5 * speedFraction * (DUTYRANGE-constStart) + constStart; //LINEAR IS HALF
+      }
+      else {
+        extraPulseWidth = speedFraction * (DUTYRANGE-constStart) + constStart;
+      }
+      //Determine which direction to drive the motor
+      if (maxIsForward){
+        dutyRate = BASEDUTY + extraPulseWidth;
+      }
+      else {
+        dutyRate = BASEDUTY - extraPulseWidth;
+//        Serial.print("GOING BAKWARD");
+//        Serial.println(dutyRate);
+      }
+
+      //Set thresholding to prevent going too fast
+      if (dutyRate > MAXDUTY - THRESHOLDBUFFER){
+        dutyRate = MAXDUTY-THRESHOLDBUFFER;
+      }
+      if (dutyRate < MINDUTY + THRESHOLDBUFFER){
+        dutyRate = MINDUTY+THRESHOLDBUFFER;
+      }
+    }
+  }
+
+  if (riderIsOn && (millis() - startTime) > 3000){
+    int pos = counter % numberOfReadings;
+    dutyReadings[pos] = dutyRate;
+
+    //Drive the PWM
+    int averageDutyRate = findAverage(dutyReadings);
+    Serial.print("DR: ");
+    Serial.print(dutyRate);
+    Serial.print("AR :");
+    Serial.println(averageDutyRate);
+    Timer1.pwm(SPEEDPIN, averageDutyRate);
+  }
+  else {
+    Timer1.pwm(SPEEDPIN, BASEDUTY); //Fixes bug regarding jumping off while going fast and board leaves you
+  }
+
+
+
+
+
+
+
+  char incomingByte;
+          // send data only when you receive data:
+        if (Serial.available() > 0) {
+                // read the incoming byte:
+                incomingByte = Serial.read();
+
+                // say what you got:
+                Serial.print("I received: ");
+                Serial.println(incomingByte);
+                    if(incomingByte == '+' || incomingByte == 'a'){
+                dutyRate += 3;
+                    }
+              else if(incomingByte == '-' || incomingByte == 'z'){
+                dutyRate -= 3;
+              }
+                Timer1.pwm(SPEEDPIN, dutyRate);
+                Serial.println(dutyRate);
+               
+        }
