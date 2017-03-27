@@ -43,7 +43,7 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 4;
+int THRESHOLDWEIGHT = 10;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDBUFFER = 4;
@@ -156,17 +156,17 @@ counter += 1;
           boolean maxIsForward = true;
  
   //Read the current weight
-  double backWeight = backwardScale.get_units();
-  double forwardWeight = forwardScale.get_units();
+  double backWeight = backwardScale.get_units() - 10;
+  double forwardWeight = forwardScale.get_units() + 10;
   RIDERWEIGHT = forwardWeight + backWeight;
 
   //MASSIVE PRINT STATEMENT
   if (counter % 4 == 0){
-//  Serial.print(backWeight, 2);
-//  Serial.print(",");
-//  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-//  Serial.print("DUTY RATE: ");
-//  Serial.println(findAverage(gDutyReadings));
+  Serial.print(backWeight, 2);
+  Serial.print(",");
+  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+  Serial.print("DUTY RATE: ");
+  Serial.println(findAverage(gDutyReadings));
 
 //  // Print the heading and orientation for fun!
 //  // Call print attitude. The LSM9DS1's magnetometer x and y
@@ -264,9 +264,8 @@ counter += 1;
     int averageDutyRate = findAverage(gDutyReadings);
     if (averageDutyRate > BASEDUTY && gLastNReadingsAvg < BASEDUTY){
       Serial.println("FIX THIS CODE");
-      resetDutyAverage(gLastNReadingsAvg);
-      averageDutyRate = findAverage(gDutyReadings);
-      Timer1.pwm(SPEEDPIN, averageDutyRate);
+      resetDutyAverage(70);
+      Timer1.pwm(SPEEDPIN, 70);
       delay(500);
 
     }
