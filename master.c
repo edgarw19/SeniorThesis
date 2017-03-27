@@ -1,4 +1,3 @@
- 
 // The SFE_LSM9DS1 library requires both Wire and SPI be
 // included BEFORE including the 9DS1 library.
 #include <Wire.h>
@@ -27,8 +26,8 @@ LSM9DS1 imu;
 #define DOUT2 4
 #define CLK2 5
 
-HX711 forwardScale(DOUT, CLK);
-HX711 backwardScale(DOUT2, CLK2);
+HX711 forwardScale(DOUT2, CLK2);
+HX711 backwardScale(DOUT, CLK);
 
 float calibration_factor = 9300; //-7050 worked for my 440lb max scale setup
 int RIDERWEIGHT = 15;
@@ -44,16 +43,19 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 8;
+int THRESHOLDWEIGHT = 4;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDBUFFER = 4;
-//change this number with numberOfReadings
-int dutyReadings[35];
-int numberOfReadings = 35;
-boolean riderIsOn = false;
-unsigned long startTime = 0;
-int constStart = 3;
+//change this number with gNumOfReadings
+int gDutyReadings[25];
+int gNumOfReadings = 25;
+double gNReadings = 5;
+double gLastNReadingsAvg = 82;
+double gFractionForward = .85;
+boolean gRiderIsOn = false;
+unsigned long gStartTime = 0;
+int gConstStart = 3;
 
 
 ////////////////////////////
@@ -101,24 +103,57 @@ void setup()
   Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
   Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
   Timer1.pwm(UNKNOWNPIN, 81);
-  for (int i = 0; i < numberOfReadings; i++){
-    dutyReadings[i] = 82;
+  for (int i = 0; i < gNumOfReadings; i++){
+    gDutyReadings[i] = 82;
   }
   Serial.println("FINISHED SET UP");
 }
 
-int findAverage(int dutyReadings[]){
-  double average = 0;
-  for (int i = 0; i < numberOfReadings; i++){
-//    Serial.print(dutyReadings[i]);
-    average += dutyReadings[i];
+void resetDutyAverage(int resetNum){
+  for (int i = 0; i < gNumOfReadings; i++){
+    gDutyReadings[i] = resetNum;
   }
-  return int(average/numberOfReadings);
+}
+int findAverage(int readings[]){
+  double average = 0;
+  for (int i = 0; i < gNumOfReadings; i++){
+//    Serial.print(gDutyReadings[i]);
+    average += readings[i];
+  }
+  return int(average/gNumOfReadings);
+}
+
+double findDirection(int readings[]){
+  double sum = 0;
+  for (int i = 0; i < gNumOfReadings; i++){
+    sum += readings[i];
+  }
+  return sum/gNumOfReadings;
+}
+
+void printWeightReadings(double forwardWeight, double backWeight){
+   Serial.print(backWeight, 2);
+   Serial.print(",");
+   Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+   Serial.print(",");
+   Serial.print(findAverage(gDutyReadings));
+   Serial.print("DUTY RATE: ");
+   Serial.println(dutyRate);
+
+   // Print the heading and orientation for fun!
+   // Call print attitude. The LSM9DS1's magnetometer x and y
+   // axes are opposite to the accelerometer, so my and mx are
+   // substituted for each other.
+   printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
+   Serial.println();
+   printAccel(); // Print "A: ax, ay, az"
 }
 
 void loop()
 {
 counter += 1;
+      int pos = counter % gNumOfReadings;
+          boolean maxIsForward = true;
  
   //Read the current weight
   double backWeight = backwardScale.get_units();
@@ -127,13 +162,11 @@ counter += 1;
 
   //MASSIVE PRINT STATEMENT
   if (counter % 4 == 0){
-  Serial.print(backWeight, 2);
-  Serial.print(",");
-  Serial.print(forwardWeight, 2); //scale.get_units() returns a float
-  Serial.print(",");
-  Serial.print(findAverage(dutyReadings));
-        Serial.print("DUTY RATE: ");
-      Serial.println(dutyRate);
+//  Serial.print(backWeight, 2);
+//  Serial.print(",");
+//  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+//  Serial.print("DUTY RATE: ");
+//  Serial.println(findAverage(gDutyReadings));
 
 //  // Print the heading and orientation for fun!
 //  // Call print attitude. The LSM9DS1's magnetometer x and y
@@ -151,18 +184,20 @@ counter += 1;
   //If rider isn't on, don't run the motor
   if (RIDERWEIGHT < THRESHOLDWEIGHT){
     dutyRate = BASEDUTY;
-    riderIsOn = false;
+    gRiderIsOn = false;
   }
-  else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !riderIsOn){
-    riderIsOn = true;
-    startTime = millis();
+  else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
+    resetDutyAverage(BASEDUTY);
+//    Serial.print("AVG: ");
+//    Serial.println(findAverage(gDutyReadings));
+    gRiderIsOn = true;
+    gStartTime = millis();
     Serial.println("STARTED ENGINE");
   }
 
   //If rider is on, calculate the right speed
   else {
     double maxWeight = forwardWeight;
-    boolean maxIsForward = true;
 
     //Calculate which direction rider is leaning
     if (backWeight > forwardWeight){
@@ -172,7 +207,6 @@ counter += 1;
 
     //Check if rider is in neutral position
     if (maxWeight < .55*RIDERWEIGHT){
-      int blah = 0;
       dutyRate = BASEDUTY;
 //      Serial.println("RIDER IS NEUTRAL");
     }
@@ -182,59 +216,66 @@ counter += 1;
       //Calculate the current pulse width
       double speedFraction = 0;
       int extraPulseWidth = 0;
+
+      //Calculate the speed fraction for forward and backwards
       if (maxIsForward){
         speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.32*RIDERWEIGHT);
         
       }
       else {
-        speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.25*RIDERWEIGHT);
-        
-//        Serial.print("SPEED FRAC");
-//        Serial.println(speedFraction);
+        speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.32*RIDERWEIGHT);
       }
-//      Serial.println(speedFraction);
+
       if (speedFraction > 1) speedFraction = 1.0;
-//      Serial.print("SPEEDS: ");
-//      Serial.print(speedFraction);
-//      Serial.print(", ");
       speedFraction = pow(speedFraction, 1);
-//      Serial.println(speedFraction);
-//      Serial.print("Pulse Width");
-//      Serial.println(extraPulseWidth);
       
+      //Calculate the pulse width for forwards and backwards
       if (maxIsForward){
-        extraPulseWidth = .5 * speedFraction * (DUTYRANGE-constStart) + constStart; //LINEAR IS HALF
+        extraPulseWidth = .5 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
       }
       else {
-        extraPulseWidth = speedFraction * (DUTYRANGE-constStart) + constStart;
+        extraPulseWidth = speedFraction * (DUTYRANGE-gConstStart) + gConstStart;
       }
+
       //Determine which direction to drive the motor
       if (maxIsForward){
         dutyRate = BASEDUTY + extraPulseWidth;
       }
       else {
         dutyRate = BASEDUTY - extraPulseWidth;
-//        Serial.print("GOING BAKWARD");
-//        Serial.println(dutyRate);
+        
       }
 
       //Set thresholding to prevent going too fast
       if (dutyRate > MAXDUTY - THRESHOLDBUFFER){
         dutyRate = MAXDUTY-THRESHOLDBUFFER;
       }
-      if (dutyRate < MINDUTY + THRESHOLDBUFFER){
+      else if (dutyRate < MINDUTY + THRESHOLDBUFFER){
         dutyRate = MINDUTY+THRESHOLDBUFFER;
       }
+      gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
     }
   }
 
-  if (riderIsOn && (millis() - startTime) > 3000){
-    int pos = counter % numberOfReadings;
-    dutyReadings[pos] = dutyRate;
-
+  if (gRiderIsOn && (millis() - gStartTime) > 3000){
+    
+    gDutyReadings[pos] = dutyRate;
     //Drive the PWM
-    int averageDutyRate = findAverage(dutyReadings);
-    Timer1.pwm(SPEEDPIN, averageDutyRate);
+    int averageDutyRate = findAverage(gDutyReadings);
+    if (averageDutyRate > BASEDUTY && gLastNReadingsAvg < BASEDUTY){
+      Serial.println("FIX THIS CODE");
+      resetDutyAverage(gLastNReadingsAvg);
+      averageDutyRate = findAverage(gDutyReadings);
+      Timer1.pwm(SPEEDPIN, averageDutyRate);
+      delay(500);
+
+    }
+    else {
+      Timer1.pwm(SPEEDPIN, averageDutyRate);
+//      Serial.println(averageDutyRate);
+    }
+//    Serial.print("AVG RATE: ");
+//    Serial.println(averageDutyRate);
   }
   else {
     Timer1.pwm(SPEEDPIN, BASEDUTY); //Fixes bug regarding jumping off while going fast and board leaves you
