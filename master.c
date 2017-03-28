@@ -43,10 +43,11 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 10;
+int THRESHOLDWEIGHT = 70;
 int increaseRate = 2;
 int counter = 0;
-int THRESHOLDBUFFER = 4;
+int THRESHOLDPULSEWIDTH = 4;
+int BACKWARDSRANGE = 8;
 //change this number with gNumOfReadings
 int gDutyReadings[25];
 int gNumOfReadings = 25;
@@ -166,7 +167,9 @@ counter += 1;
   Serial.print(",");
   Serial.println(forwardWeight, 2); //scale.get_units() returns a float
   Serial.print("DUTY RATE: ");
-  Serial.println(findAverage(gDutyReadings));
+  Serial.print(findAverage(gDutyReadings));
+  Serial.print(", ");
+  Serial.println(dutyRate);
 
 //  // Print the heading and orientation for fun!
 //  // Call print attitude. The LSM9DS1's magnetometer x and y
@@ -188,8 +191,6 @@ counter += 1;
   }
   else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
     resetDutyAverage(BASEDUTY);
-//    Serial.print("AVG: ");
-//    Serial.println(findAverage(gDutyReadings));
     gRiderIsOn = true;
     gStartTime = millis();
     Serial.println("STARTED ENGINE");
@@ -223,7 +224,7 @@ counter += 1;
         
       }
       else {
-        speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.32*RIDERWEIGHT);
+        speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.20*RIDERWEIGHT);
       }
 
       if (speedFraction > 1) speedFraction = 1.0;
@@ -234,7 +235,7 @@ counter += 1;
         extraPulseWidth = .5 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
       }
       else {
-        extraPulseWidth = speedFraction * (DUTYRANGE-gConstStart) + gConstStart;
+        extraPulseWidth = speedFraction * BACKWARDSRANGE;
       }
 
       //Determine which direction to drive the motor
@@ -242,16 +243,16 @@ counter += 1;
         dutyRate = BASEDUTY + extraPulseWidth;
       }
       else {
-        dutyRate = BASEDUTY - extraPulseWidth;
+        dutyRate = 70 - extraPulseWidth;
         
       }
 
       //Set thresholding to prevent going too fast
-      if (dutyRate > MAXDUTY - THRESHOLDBUFFER){
-        dutyRate = MAXDUTY-THRESHOLDBUFFER;
+      if (dutyRate > 87){
+        dutyRate = 87;
       }
-      else if (dutyRate < MINDUTY + THRESHOLDBUFFER){
-        dutyRate = MINDUTY+THRESHOLDBUFFER;
+      else if (dutyRate < 62){ //TODO update this to variables
+        dutyRate = 62;
       }
       gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
     }
@@ -262,6 +263,12 @@ counter += 1;
     gDutyReadings[pos] = dutyRate;
     //Drive the PWM
     int averageDutyRate = findAverage(gDutyReadings);
+    if (averageDutyRate > 100){
+      averageDutyRate = 100;
+    }
+    else if (averageDutyRate < 62){ //TODO update this to variables
+      averageDutyRate = 62;
+    }
     if (averageDutyRate > BASEDUTY && gLastNReadingsAvg < BASEDUTY){
       Serial.println("FIX THIS CODE");
       resetDutyAverage(70);
