@@ -53,6 +53,8 @@ int gDutyReadings[25];
 int gNumOfReadings = 25;
 double gNReadings = 5;
 double gLastNReadingsAvg = 82;
+double gBrakeAverage = 82;
+double gNumBrakeReadings = 2;
 double gFractionForward = .85;
 boolean gRiderIsOn = false;
 unsigned long gStartTime = 0;
@@ -163,13 +165,13 @@ counter += 1;
 
   //MASSIVE PRINT STATEMENT
   if (counter % 4 == 0){
-  Serial.print(backWeight, 2);
-  Serial.print(",");
-  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-  Serial.print("DUTY RATE: ");
-  Serial.print(findAverage(gDutyReadings));
-  Serial.print(", ");
-  Serial.println(dutyRate);
+//  Serial.print(backWeight, 2);
+//  Serial.print(",");
+//  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+//  Serial.print("DUTY RATE: ");
+//  Serial.print(findAverage(gDutyReadings));
+//  Serial.print(", ");
+//  Serial.println(dutyRate);
 
 //  // Print the heading and orientation for fun!
 //  // Call print attitude. The LSM9DS1's magnetometer x and y
@@ -248,13 +250,14 @@ counter += 1;
       }
 
       //Set thresholding to prevent going too fast
-      if (dutyRate > 87){
-        dutyRate = 87;
+      if (dutyRate > 100){
+        dutyRate = 100;
       }
       else if (dutyRate < 62){ //TODO update this to variables
         dutyRate = 62;
       }
       gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
+      gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
     }
   }
 
@@ -263,25 +266,31 @@ counter += 1;
     gDutyReadings[pos] = dutyRate;
     //Drive the PWM
     int averageDutyRate = findAverage(gDutyReadings);
+    
+    //Cap the duty rate
     if (averageDutyRate > 100){
       averageDutyRate = 100;
     }
     else if (averageDutyRate < 62){ //TODO update this to variables
       averageDutyRate = 62;
     }
-    if (averageDutyRate > BASEDUTY && gLastNReadingsAvg < BASEDUTY){
+
+    //
+    if (averageDutyRate > 86 && gLastNReadingsAvg < 82){
       Serial.println("FIX THIS CODE");
       resetDutyAverage(70);
       Timer1.pwm(SPEEDPIN, 70);
-      delay(500);
-
     }
     else {
-      Timer1.pwm(SPEEDPIN, averageDutyRate);
-//      Serial.println(averageDutyRate);
+      //Special brake case, if rider is actively trying to brake
+      if (gBrakeAverage < 64){
+        Timer1.pwm(SPEEDPIN, 64);
+        delay(2000);
+      }
+      else {
+        Timer1.pwm(SPEEDPIN, averageDutyRate);
+      }
     }
-//    Serial.print("AVG RATE: ");
-//    Serial.println(averageDutyRate);
   }
   else {
     Timer1.pwm(SPEEDPIN, BASEDUTY); //Fixes bug regarding jumping off while going fast and board leaves you
