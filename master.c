@@ -43,22 +43,28 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 70;
+int THRESHOLDWEIGHT = 50;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
 //change this number with gNumOfReadings
-int gDutyReadings[25];
-int gNumOfReadings = 25;
+int gDutyReadings[30];
+int gNumOfReadings = 30;
 double gNReadings = 5;
+double gNResetReadings = 5;
 double gLastNReadingsAvg = 82;
+double gLastNReadingsReset = 82;
 double gBrakeAverage = 82;
 double gNumBrakeReadings = 2;
 double gFractionForward = .85;
 boolean gRiderIsOn = false;
+boolean isBraking = false;
 unsigned long gStartTime = 0;
 int gConstStart = 3;
+double gBoardAngleAvg = 0;
+double gNumBoardAngleReadings = 5;
+double lastDutyRate = 82;
 
 
 ////////////////////////////
@@ -73,44 +79,6 @@ int gConstStart = 3;
 // your's here:
 // http://www.ngdc.noaa.gov/geomag-web/#declination
 #define DECLINATION -12 // Declination (degrees) in Boulder, CO.
-
-void setup() 
-{
-  
-  Serial.begin(9600);
-  
-  // Initialize IMU
-  imu.settings.device.commInterface = IMU_MODE_I2C;
-  imu.settings.device.mAddress = LSM9DS1_M;
-  imu.settings.device.agAddress = LSM9DS1_AG;
-
-  // Initialize scale
-  forwardScale.set_scale(calibration_factor);
-  forwardScale.tare();
-  backwardScale.set_scale(calibration_factor); 
-  backwardScale.tare(); 
-  Serial.println("WTF");
-  Serial.println("Readings:");
-  if (!imu.begin())
-  {
-    Serial.println("Failed to communicate with LSM9DS1.");
-    Serial.println("Double-check wiring.");
-    Serial.println("Default settings in this sketch will " \
-                  "work for an out of the box LSM9DS1 " \
-                  "Breakout, but may need to be modified " \
-                  "if the board jumpers are.");
-    while (1)
-      ;
-  }
-  Timer1.initialize(500000); 
-  Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
-  Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
-  Timer1.pwm(UNKNOWNPIN, 81);
-  for (int i = 0; i < gNumOfReadings; i++){
-    gDutyReadings[i] = 82;
-  }
-  Serial.println("FINISHED SET UP");
-}
 
 void resetDutyAverage(int resetNum){
   for (int i = 0; i < gNumOfReadings; i++){
@@ -152,6 +120,45 @@ void printWeightReadings(double forwardWeight, double backWeight){
    printAccel(); // Print "A: ax, ay, az"
 }
 
+void setup() 
+{
+  
+  Serial.begin(9600);
+  
+  // Initialize IMU
+  imu.settings.device.commInterface = IMU_MODE_I2C;
+  imu.settings.device.mAddress = LSM9DS1_M;
+  imu.settings.device.agAddress = LSM9DS1_AG;
+
+  // Initialize scale
+  forwardScale.set_scale(calibration_factor);
+  forwardScale.tare();
+  backwardScale.set_scale(calibration_factor); 
+  backwardScale.tare(); 
+  Serial.println("WTF");
+  Serial.println("Readings:");
+  if (!imu.begin())
+  {
+    Serial.println("Failed to communicate with LSM9DS1.");
+    Serial.println("Double-check wiring.");
+    Serial.println("Default settings in this sketch will " \
+                  "work for an out of the box LSM9DS1 " \
+                  "Breakout, but may need to be modified " \
+                  "if the board jumpers are.");
+    while (1)
+      ;
+  }
+  Timer1.initialize(500000); 
+  Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
+  Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
+  Timer1.pwm(UNKNOWNPIN, 81);
+  for (int i = 0; i < gNumOfReadings; i++){
+    gDutyReadings[i] = 82;
+  }
+  Serial.println("FINISHED SET UP");
+}
+
+
 void loop()
 {
 counter += 1;
@@ -161,34 +168,16 @@ counter += 1;
   //Read the current weight
   double backWeight = backwardScale.get_units() - 10;
   double forwardWeight = forwardScale.get_units() + 10;
+      float boardAngle = printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
   RIDERWEIGHT = forwardWeight + backWeight;
+  gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * boardAngle;
 
-  //MASSIVE PRINT STATEMENT
-  if (counter % 4 == 0){
-//  Serial.print(backWeight, 2);
-//  Serial.print(",");
-//  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-//  Serial.print("DUTY RATE: ");
-//  Serial.print(findAverage(gDutyReadings));
-//  Serial.print(", ");
-//  Serial.println(dutyRate);
 
-//  // Print the heading and orientation for fun!
-//  // Call print attitude. The LSM9DS1's magnetometer x and y
-//  // axes are opposite to the accelerometer, so my and mx are
-//  // substituted for each other.
-//  printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
-//  Serial.println();
-//  Serial.println();
-//  Serial.println();
-//  Serial.println(forwardWeight);
-//  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
-//  printAccel(); // Print "A: ax, ay, az"
-  }
 
   //If rider isn't on, don't run the motor
   if (RIDERWEIGHT < THRESHOLDWEIGHT){
     dutyRate = BASEDUTY;
+    resetDutyAverage(BASEDUTY);
     gRiderIsOn = false;
   }
   else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
@@ -201,6 +190,7 @@ counter += 1;
   //If rider is on, calculate the right speed
   else {
     double maxWeight = forwardWeight;
+    lastDutyRate = dutyRate;
 
     //Calculate which direction rider is leaning
     if (backWeight > forwardWeight){
@@ -234,7 +224,7 @@ counter += 1;
       
       //Calculate the pulse width for forwards and backwards
       if (maxIsForward){
-        extraPulseWidth = .5 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
+        extraPulseWidth = .8 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
       }
       else {
         extraPulseWidth = speedFraction * BACKWARDSRANGE;
@@ -256,8 +246,44 @@ counter += 1;
       else if (dutyRate < 62){ //TODO update this to variables
         dutyRate = 62;
       }
+
+  int testDutyNow = dutyRate;
+  // Allows you to check last N readings to trigger reset
+  gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
+      //if current num is TOO different from the last num, then set current NUm to working avg
+      if (abs(gLastNReadingsReset - dutyRate) > 15){
+        dutyRate = gLastNReadingsReset;
+      }
+      //if current num is TOO different 
+      if (abs(dutyRate - gLastNReadingsReset) > 15){
+        dutyRate = gLastNReadingsReset;
+      }
+      
+              //MASSIVE PRINT STATEMENT
+  if (counter % 4 == 0){
+  Serial.print(backWeight, 2);
+  Serial.print(",");
+  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+  Serial.print("DUTY RATE: ");
+  Serial.print(findAverage(gDutyReadings));
+  Serial.print(", ");
+  Serial.print(dutyRate);
+    Serial.print(", ");
+  Serial.println(testDutyNow);
+
+//  // Print the heading and orientation for fun!
+//  // Call print attitude. The LSM9DS1's magnetometer x and y
+//  // axes are opposite to the accelerometer, so my and mx are
+//  // substituted for each other.
+//  Serial.println(gBoardAngleAvg);
+//  Serial.println();
+//  Serial.println(forwardWeight);
+//  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
+//  printAccel(); // Print "A: ax, ay, az"
+  }
       gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
       gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
+      
     }
   }
 
@@ -276,16 +302,23 @@ counter += 1;
     }
 
     //
-    if (averageDutyRate > 86 && gLastNReadingsAvg < 82){
-      Serial.println("FIX THIS CODE");
+    if (averageDutyRate > 87 && gLastNReadingsAvg < 80){
+      Serial.println("FAST");
       resetDutyAverage(70);
       Timer1.pwm(SPEEDPIN, 70);
     }
+    else if (averageDutyRate < 70 && gLastNReadingsAvg > 88){
+      Serial.println("SLOW");
+      resetDutyAverage(88);
+      Timer1.pwm(SPEEDPIN, 88);
+    }
     else {
       //Special brake case, if rider is actively trying to brake
-      if (gBrakeAverage < 64){
+      if (averageDutyRate > 86 && gBrakeAverage < 66 && gLastNReadingsAvg < 75){
         Timer1.pwm(SPEEDPIN, 64);
-        delay(2000);
+        resetDutyAverage(64);
+        Serial.println("MAX BREAK TRIGGERED");
+        delay(250);
       }
       else {
         Timer1.pwm(SPEEDPIN, averageDutyRate);
@@ -302,6 +335,7 @@ void printGyro()
   // To read from the gyroscope, you must first call the
   // readGyro() function. When this exits, it'll update the
   // gx, gy, and gz variables with the most current data.
+  
   imu.readGyro();
   
   // Now we can use the gx, gy, and gz variables as we please.
@@ -384,8 +418,10 @@ void printMag()
 // http://cache.freescale.com/files/sensors/doc/app_note/AN3461.pdf?fpsp=1
 // Heading calculations taken from this app note:
 // http://www51.honeywell.com/aero/common/documents/myaerospacecatalog-documents/Defense_Brochures-documents/Magnetic__Literature_Application_notes-documents/AN203_Compass_Heading_Using_Magnetometers.pdf
-void printAttitude(float ax, float ay, float az, float mx, float my, float mz)
+double printAttitude(float ax, float ay, float az, float mx, float my, float mz)
 {
+  imu.readMag();
+  imu.readAccel();
   float roll = atan2(ay, az);
   float pitch = atan2(-ax, sqrt(ay * ay + az * az));
   
@@ -406,9 +442,9 @@ void printAttitude(float ax, float ay, float az, float mx, float my, float mz)
   pitch *= 180.0 / PI;
   roll  *= 180.0 / PI;
   
-  Serial.print("Pitch, Roll: ");
-  Serial.print(pitch, 2);
-  Serial.print(", ");
-  Serial.println(roll, 2);
-  Serial.print("Heading: "); Serial.println(heading, 2);
+  // Serial.print("Pitch, Roll: ");
+  // Serial.print(", ");
+  // Serial.println(roll, 2);
+  // Serial.print("Heading: "); Serial.println(heading, 2);
+  return pitch;
 } 
