@@ -43,16 +43,17 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 50;
+int THRESHOLDWEIGHT = 20;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
-//change this number with gNumOfReadings
-int gDutyReadings[30];
-int gNumOfReadings = 30;
+//change this number with gNumForwardReadings
+double gDutyAverage = 82;
+double gNumForwardReadings = 20;
+double gNumBackwardReadings = 10;
 double gNReadings = 5;
-double gNResetReadings = 5;
+double gNResetReadings = 4;
 double gLastNReadingsAvg = 82;
 double gLastNReadingsReset = 82;
 double gBrakeAverage = 82;
@@ -80,26 +81,22 @@ double lastDutyRate = 82;
 // http://www.ngdc.noaa.gov/geomag-web/#declination
 #define DECLINATION -12 // Declination (degrees) in Boulder, CO.
 
-void resetDutyAverage(int resetNum){
-  for (int i = 0; i < gNumOfReadings; i++){
-    gDutyReadings[i] = resetNum;
-  }
-}
+
 int findAverage(int readings[]){
   double average = 0;
-  for (int i = 0; i < gNumOfReadings; i++){
-//    Serial.print(gDutyReadings[i]);
+  for (int i = 0; i < gNumForwardReadings; i++){
+//    Serial.print(gDutyAverage[i]);
     average += readings[i];
   }
-  return int(average/gNumOfReadings);
+  return int(average/gNumForwardReadings);
 }
 
 double findDirection(int readings[]){
   double sum = 0;
-  for (int i = 0; i < gNumOfReadings; i++){
+  for (int i = 0; i < gNumForwardReadings; i++){
     sum += readings[i];
   }
-  return sum/gNumOfReadings;
+  return sum/gNumForwardReadings;
 }
 
 void printWeightReadings(double forwardWeight, double backWeight){
@@ -107,7 +104,7 @@ void printWeightReadings(double forwardWeight, double backWeight){
    Serial.print(",");
    Serial.println(forwardWeight, 2); //scale.get_units() returns a float
    Serial.print(",");
-   Serial.print(findAverage(gDutyReadings));
+   Serial.print(gDutyAverage);
    Serial.print("DUTY RATE: ");
    Serial.println(dutyRate);
 
@@ -152,17 +149,14 @@ void setup()
   Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
   Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
   Timer1.pwm(UNKNOWNPIN, 81);
-  for (int i = 0; i < gNumOfReadings; i++){
-    gDutyReadings[i] = 82;
-  }
+  gDutyAverage = 82;
   Serial.println("FINISHED SET UP");
 }
 
 
 void loop()
 {
-counter += 1;
-      int pos = counter % gNumOfReadings;
+
           boolean maxIsForward = true;
  
   //Read the current weight
@@ -177,11 +171,15 @@ counter += 1;
   //If rider isn't on, don't run the motor
   if (RIDERWEIGHT < THRESHOLDWEIGHT){
     dutyRate = BASEDUTY;
-    resetDutyAverage(BASEDUTY);
+    gDutyAverage = BASEDUTY;
     gRiderIsOn = false;
+//    Serial.println("RIDER NOT ON");
+//          Serial.print(backWeight, 2);
+//      Serial.print(",");
+//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
   }
   else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
-    resetDutyAverage(BASEDUTY);
+    gDutyAverage = BASEDUTY;
     gRiderIsOn = true;
     gStartTime = millis();
     Serial.println("STARTED ENGINE");
@@ -189,6 +187,7 @@ counter += 1;
 
   //If rider is on, calculate the right speed
   else {
+    counter += 1;
     double maxWeight = forwardWeight;
     lastDutyRate = dutyRate;
 
@@ -201,7 +200,7 @@ counter += 1;
     //Check if rider is in neutral position
     if (maxWeight < .55*RIDERWEIGHT){
       dutyRate = BASEDUTY;
-//      Serial.println("RIDER IS NEUTRAL");
+      Serial.println("RIDER IS NEUTRAL");
     }
 
     //If not, drive the motor
@@ -213,18 +212,16 @@ counter += 1;
       //Calculate the speed fraction for forward and backwards
       if (maxIsForward){
         speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.32*RIDERWEIGHT);
-        
       }
       else {
         speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.20*RIDERWEIGHT);
       }
 
       if (speedFraction > 1) speedFraction = 1.0;
-      speedFraction = pow(speedFraction, 1);
       
       //Calculate the pulse width for forwards and backwards
       if (maxIsForward){
-        extraPulseWidth = .8 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
+        extraPulseWidth = 1 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
       }
       else {
         extraPulseWidth = speedFraction * BACKWARDSRANGE;
@@ -248,8 +245,9 @@ counter += 1;
       }
 
   int testDutyNow = dutyRate;
-  // Allows you to check last N readings to trigger reset
-  gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
+      // Allows you to check last N readings to trigger reset
+      gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
+      
       //if current num is TOO different from the last num, then set current NUm to working avg
       if (abs(gLastNReadingsReset - dutyRate) > 15){
         dutyRate = gLastNReadingsReset;
@@ -259,28 +257,28 @@ counter += 1;
         dutyRate = gLastNReadingsReset;
       }
       
-              //MASSIVE PRINT STATEMENT
-  if (counter % 4 == 0){
-  Serial.print(backWeight, 2);
-  Serial.print(",");
-  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-  Serial.print("DUTY RATE: ");
-  Serial.print(findAverage(gDutyReadings));
-  Serial.print(", ");
-  Serial.print(dutyRate);
-    Serial.print(", ");
-  Serial.println(testDutyNow);
+                  //MASSIVE PRINT STATEMENT
+      if (counter % 4 == 0){
+//      Serial.print(backWeight, 2);
+//      Serial.print(",");
+//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+//      Serial.print("DUTY RATE: ");
+//      Serial.print(gDutyAverage);
+//      Serial.print(", ");
+//      Serial.print(dutyRate);
+//        Serial.print(", ");
+//      Serial.println(testDutyNow);
 
-//  // Print the heading and orientation for fun!
-//  // Call print attitude. The LSM9DS1's magnetometer x and y
-//  // axes are opposite to the accelerometer, so my and mx are
-//  // substituted for each other.
-//  Serial.println(gBoardAngleAvg);
-//  Serial.println();
-//  Serial.println(forwardWeight);
-//  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
-//  printAccel(); // Print "A: ax, ay, az"
-  }
+    //  // Print the heading and orientation for fun!
+    //  // Call print attitude. The LSM9DS1's magnetometer x and y
+    //  // axes are opposite to the accelerometer, so my and mx are
+    //  // substituted for each other.
+    //  Serial.println(gBoardAngleAvg);
+    //  Serial.println();
+    //  Serial.println(forwardWeight);
+    //  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
+    //  printAccel(); // Print "A: ax, ay, az"
+      }
       gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
       gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
       
@@ -288,10 +286,15 @@ counter += 1;
   }
 
   if (gRiderIsOn && (millis() - gStartTime) > 3000){
+      if (dutyRate > BASEDUTY){
+        gDutyAverage = (1-1/gNumForwardReadings) * gDutyAverage + (1/gNumForwardReadings) * dutyRate;
+      }
+      else {
+        gDutyAverage = (1-1/gNumBackwardReadings) * gDutyAverage + (1/gNumBackwardReadings) * dutyRate;
+      }
     
-    gDutyReadings[pos] = dutyRate;
     //Drive the PWM
-    int averageDutyRate = findAverage(gDutyReadings);
+    int averageDutyRate = gDutyAverage;
     
     //Cap the duty rate
     if (averageDutyRate > 100){
@@ -302,27 +305,27 @@ counter += 1;
     }
 
     //
-    if (averageDutyRate > 87 && gLastNReadingsAvg < 80){
+    if (averageDutyRate > 84 && gLastNReadingsAvg < 80){
       Serial.println("FAST");
-      resetDutyAverage(70);
+      gDutyAverage = 70;
       Timer1.pwm(SPEEDPIN, 70);
     }
-    else if (averageDutyRate < 70 && gLastNReadingsAvg > 88){
+    else if (averageDutyRate < 75 && gLastNReadingsAvg > 85){
       Serial.println("SLOW");
-      resetDutyAverage(88);
-      Timer1.pwm(SPEEDPIN, 88);
+      gDutyAverage = 85;
+      Timer1.pwm(SPEEDPIN, 85);
     }
     else {
       //Special brake case, if rider is actively trying to brake
-      if (averageDutyRate > 86 && gBrakeAverage < 66 && gLastNReadingsAvg < 75){
-        Timer1.pwm(SPEEDPIN, 64);
-        resetDutyAverage(64);
-        Serial.println("MAX BREAK TRIGGERED");
-        delay(250);
-      }
-      else {
+//      if ( gBrakeAverage < 65 && gLastNReadingsAvg < 75){
+//        Timer1.pwm(SPEEDPIN, 64);
+//        gDutyAverage = 64;
+//        Serial.println("MAX BREAK TRIGGERED");
+////        delay(250);
+//      }
+//      else {
         Timer1.pwm(SPEEDPIN, averageDutyRate);
-      }
+//      }
     }
   }
   else {
