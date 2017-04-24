@@ -50,21 +50,22 @@ int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
 //change this number with gNumForwardReadings
 double gDutyAverage = 82;
-double gNumForwardReadings = 20;
+double gNumForwardReadings = 30;
 double gNumBackwardReadings = 10;
-double gNReadings = 5;
 double gNResetReadings = 4;
-double gLastNReadingsAvg = 82;
 double gLastNReadingsReset = 82;
 double gBrakeAverage = 82;
 double gNumBrakeReadings = 2;
 double gFractionForward = .85;
+double gUpHillFWDMultiplier = 2.2;
+double gDownHillFWDMultipler = 6;
+
 boolean gRiderIsOn = false;
 boolean isBraking = false;
 unsigned long gStartTime = 0;
 int gConstStart = 3;
 double gBoardAngleAvg = 0;
-double gNumBoardAngleReadings = 5;
+double gNumBoardAngleReadings = 10;
 double lastDutyRate = 82;
 
 
@@ -99,23 +100,7 @@ double findDirection(int readings[]){
   return sum/gNumForwardReadings;
 }
 
-void printWeightReadings(double forwardWeight, double backWeight){
-   Serial.print(backWeight, 2);
-   Serial.print(",");
-   Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-   Serial.print(",");
-   Serial.print(gDutyAverage);
-   Serial.print("DUTY RATE: ");
-   Serial.println(dutyRate);
 
-   // Print the heading and orientation for fun!
-   // Call print attitude. The LSM9DS1's magnetometer x and y
-   // axes are opposite to the accelerometer, so my and mx are
-   // substituted for each other.
-   printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
-   Serial.println();
-   printAccel(); // Print "A: ax, ay, az"
-}
 
 void setup() 
 {
@@ -162,11 +147,40 @@ void loop()
   //Read the current weight
   double backWeight = backwardScale.get_units() - 10;
   double forwardWeight = forwardScale.get_units() + 10;
-      float boardAngle = printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
-  RIDERWEIGHT = forwardWeight + backWeight;
+  float boardAngle = printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz) - 2;
+  float testAngle = boardAngle;
+  // angle fix
+  if (abs(boardAngle - gBoardAngleAvg) > 5){
+    boardAngle = gBoardAngleAvg;
+  }
   gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * boardAngle;
+  RIDERWEIGHT = forwardWeight + backWeight;
+  
 
+                    //MASSIVE PRINT STATEMENT
+                    counter += 1;
+      if (counter % 4 == 0){
+      Serial.print("WEIGHTS :");
+      Serial.print(backWeight, 2);
+      Serial.print(",");
+      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+      Serial.print("DUTY RATE: ");
+      Serial.print(gDutyAverage);
+      Serial.print(", ");
+      Serial.println(dutyRate);
+      Serial.print("ANGLE :");
+      Serial.print(-(boardAngle));
+      Serial.print(", ");
+      Serial.print(-(testAngle));
+      Serial.print(", ");
 
+      // Print the heading and orientation for fun!
+      // Call print attitude. The LSM9DS1's magnetometer x and y
+      // axes are opposite to the accelerometer, so my and mx are
+      // substituted for each other.
+      Serial.println(-(gBoardAngleAvg));
+      Serial.println();
+      }
 
   //If rider isn't on, don't run the motor
   if (RIDERWEIGHT < THRESHOLDWEIGHT){
@@ -187,7 +201,15 @@ void loop()
 
   //If rider is on, calculate the right speed
   else {
-    counter += 1;
+//angle add
+      if (gBoardAngleAvg > 0) {
+     forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
+  }
+  else {
+     forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
+  }
+  RIDERWEIGHT = forwardWeight + backWeight;
+    
     double maxWeight = forwardWeight;
     lastDutyRate = dutyRate;
 
@@ -200,7 +222,6 @@ void loop()
     //Check if rider is in neutral position
     if (maxWeight < .55*RIDERWEIGHT){
       dutyRate = BASEDUTY;
-      Serial.println("RIDER IS NEUTRAL");
     }
 
     //If not, drive the motor
@@ -211,7 +232,7 @@ void loop()
 
       //Calculate the speed fraction for forward and backwards
       if (maxIsForward){
-        speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.32*RIDERWEIGHT);
+        speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.27*RIDERWEIGHT);
       }
       else {
         speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.20*RIDERWEIGHT);
@@ -249,37 +270,17 @@ void loop()
       gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
       
       //if current num is TOO different from the last num, then set current NUm to working avg
-      if (abs(gLastNReadingsReset - dutyRate) > 15){
+      if (abs(gDutyAverage - dutyRate) > 10){
+        dutyRate = gDutyAverage;
+      }
+      if (abs(gLastNReadingsReset - gDutyAverage) > 10){
         dutyRate = gLastNReadingsReset;
       }
-      //if current num is TOO different 
-      if (abs(dutyRate - gLastNReadingsReset) > 15){
-        dutyRate = gLastNReadingsReset;
-      }
-      
-                  //MASSIVE PRINT STATEMENT
-      if (counter % 4 == 0){
-//      Serial.print(backWeight, 2);
-//      Serial.print(",");
-//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-//      Serial.print("DUTY RATE: ");
-//      Serial.print(gDutyAverage);
-//      Serial.print(", ");
-//      Serial.print(dutyRate);
-//        Serial.print(", ");
-//      Serial.println(testDutyNow);
 
-    //  // Print the heading and orientation for fun!
-    //  // Call print attitude. The LSM9DS1's magnetometer x and y
-    //  // axes are opposite to the accelerometer, so my and mx are
-    //  // substituted for each other.
-    //  Serial.println(gBoardAngleAvg);
-    //  Serial.println();
-    //  Serial.println(forwardWeight);
-    //  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
-    //  printAccel(); // Print "A: ax, ay, az"
-      }
-      gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
+
+
+      
+
       gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
       
     }
@@ -305,12 +306,12 @@ void loop()
     }
 
     //
-    if (averageDutyRate > 84 && gLastNReadingsAvg < 80){
-      Serial.println("FAST");
-      gDutyAverage = 70;
-      Timer1.pwm(SPEEDPIN, 70);
-    }
-    else if (averageDutyRate < 75 && gLastNReadingsAvg > 85){
+//    if (averageDutyRate > 84 && gLastNReadingsReset < 80){
+//      Serial.println("FAST");
+//      gDutyAverage = 70;
+//      Timer1.pwm(SPEEDPIN, 70);
+//    }
+    if (averageDutyRate < 75 && gLastNReadingsReset > 85){
       Serial.println("SLOW");
       gDutyAverage = 85;
       Timer1.pwm(SPEEDPIN, 85);
