@@ -43,32 +43,22 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 20;
+int THRESHOLDWEIGHT = 70;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
-//change this number with gNumForwardReadings
-double gDutyAverage = 82;
-double gNumForwardReadings = 30;
-double gNumBackwardReadings = 10;
-double gNAngleResetReadings = 4;
-double gNResetReadings = 10;
-double gLastNReadingsReset = 82;
-double gLastNAngleReadings = 0;
+//change this number with gNumOfReadings
+int gDutyReadings[25];
+int gNumOfReadings = 25;
+double gNReadings = 5;
+double gLastNReadingsAvg = 82;
 double gBrakeAverage = 82;
 double gNumBrakeReadings = 2;
 double gFractionForward = .85;
-double gUpHillFWDMultiplier = 2.2;
-double gDownHillFWDMultipler = 5;
-
 boolean gRiderIsOn = false;
-boolean isBraking = false;
 unsigned long gStartTime = 0;
 int gConstStart = 3;
-double gBoardAngleAvg = 0;
-double gNumBoardAngleReadings = 10;
-double lastDutyRate = 82;
 
 
 ////////////////////////////
@@ -82,27 +72,7 @@ double lastDutyRate = 82;
 // a declination to get a more accurate heading. Calculate 
 // your's here:
 // http://www.ngdc.noaa.gov/geomag-web/#declination
-#define DECLINATION -12.49 // Declination (degrees) in Boulder, CO.
-
-
-int findAverage(int readings[]){
-  double average = 0;
-  for (int i = 0; i < gNumForwardReadings; i++){
-//    Serial.print(gDutyAverage[i]);
-    average += readings[i];
-  }
-  return int(average/gNumForwardReadings);
-}
-
-double findDirection(int readings[]){
-  double sum = 0;
-  for (int i = 0; i < gNumForwardReadings; i++){
-    sum += readings[i];
-  }
-  return sum/gNumForwardReadings;
-}
-
-
+#define DECLINATION -12 // Declination (degrees) in Boulder, CO.
 
 void setup() 
 {
@@ -136,93 +106,101 @@ void setup()
   Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
   Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
   Timer1.pwm(UNKNOWNPIN, 81);
-  gDutyAverage = 82;
+  for (int i = 0; i < gNumOfReadings; i++){
+    gDutyReadings[i] = 82;
+  }
   Serial.println("FINISHED SET UP");
 }
 
+void resetDutyAverage(int resetNum){
+  for (int i = 0; i < gNumOfReadings; i++){
+    gDutyReadings[i] = resetNum;
+  }
+}
+int findAverage(int readings[]){
+  double average = 0;
+  for (int i = 0; i < gNumOfReadings; i++){
+//    Serial.print(gDutyReadings[i]);
+    average += readings[i];
+  }
+  return int(average/gNumOfReadings);
+}
+
+double findDirection(int readings[]){
+  double sum = 0;
+  for (int i = 0; i < gNumOfReadings; i++){
+    sum += readings[i];
+  }
+  return sum/gNumOfReadings;
+}
+
+void printWeightReadings(double forwardWeight, double backWeight){
+   Serial.print(backWeight, 2);
+   Serial.print(",");
+   Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+   Serial.print(",");
+   Serial.print(findAverage(gDutyReadings));
+   Serial.print("DUTY RATE: ");
+   Serial.println(dutyRate);
+
+   // Print the heading and orientation for fun!
+   // Call print attitude. The LSM9DS1's magnetometer x and y
+   // axes are opposite to the accelerometer, so my and mx are
+   // substituted for each other.
+   printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
+   Serial.println();
+   printAccel(); // Print "A: ax, ay, az"
+}
 
 void loop()
 {
-
+counter += 1;
+      int pos = counter % gNumOfReadings;
           boolean maxIsForward = true;
  
   //Read the current weight
   double backWeight = backwardScale.get_units() - 10;
   double forwardWeight = forwardScale.get_units() + 10;
-  float boardAngle = printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz) - 2;
-  float testAngle = boardAngle;
-  gLastNAngleReadings = (1-1/gNAngleResetReadings) * gLastNAngleReadings + (1/gNAngleResetReadings) * boardAngle;
-  // angle fix
-  if (abs(boardAngle - gBoardAngleAvg) > 5){
-    boardAngle = gBoardAngleAvg;
-  }
-  if (abs(gLastNAngleReadings - gBoardAngleAvg) > 5){
-    boardAngle = gLastNAngleReadings;
-  }
-  gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * boardAngle;
-
-
-
-
   RIDERWEIGHT = forwardWeight + backWeight;
-  
 
-                    //MASSIVE PRINT STATEMENT
-                    counter += 1;
-      if (counter % 4 == 0){
-      Serial.print("WEIGHTS, ");
-      Serial.print(backWeight, 2);
-      Serial.print(",");
-      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-      Serial.print("DUTY, ");
-      Serial.print(dutyRate);
-      Serial.print(", ");
-      Serial.print(gDutyAverage);
-      Serial.print(", ");
-      Serial.println(gLastNReadingsReset);
-      Serial.print("ANGLE, ");
-      Serial.print(-(testAngle));
-      Serial.print(", ");
-      Serial.print(-(gBoardAngleAvg));
-      Serial.print(", ");
+  //MASSIVE PRINT STATEMENT
+  if (counter % 4 == 0){
+//  Serial.print(backWeight, 2);
+//  Serial.print(",");
+//  Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+//  Serial.print("DUTY RATE: ");
+//  Serial.print(findAverage(gDutyReadings));
+//  Serial.print(", ");
+//  Serial.println(dutyRate);
 
-      // Print the heading and orientation for fun!
-      // Call print attitude. The LSM9DS1's magnetometer x and y
-      // axes are opposite to the accelerometer, so my and mx are
-      // substituted for each other.
-      Serial.println(-(gLastNAngleReadings));
-      Serial.println();
-      }
+//  // Print the heading and orientation for fun!
+//  // Call print attitude. The LSM9DS1's magnetometer x and y
+//  // axes are opposite to the accelerometer, so my and mx are
+//  // substituted for each other.
+//  printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
+//  Serial.println();
+//  Serial.println();
+//  Serial.println();
+//  Serial.println(forwardWeight);
+//  Serial.println(forwardWeight*1.0/(backWeight + forwardWeight));
+//  printAccel(); // Print "A: ax, ay, az"
+  }
 
   //If rider isn't on, don't run the motor
   if (RIDERWEIGHT < THRESHOLDWEIGHT){
     dutyRate = BASEDUTY;
-    gDutyAverage = BASEDUTY;
     gRiderIsOn = false;
-//    Serial.println("RIDER NOT ON");
-//          Serial.print(backWeight, 2);
-//      Serial.print(",");
-//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
   }
   else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
-    gDutyAverage = BASEDUTY;
+    resetDutyAverage(BASEDUTY);
     gRiderIsOn = true;
     gStartTime = millis();
+    Serial.println("STARTED ENGINE");
   }
 
   //If rider is on, calculate the right speed
   else {
-//angle add
-      if (gBoardAngleAvg > 0) {
-     forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
-  }
-  else {
-     forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
-  }
-  RIDERWEIGHT = forwardWeight + backWeight;
-    
     double maxWeight = forwardWeight;
-    lastDutyRate = dutyRate;
 
     //Calculate which direction rider is leaning
     if (backWeight > forwardWeight){
@@ -233,6 +211,7 @@ void loop()
     //Check if rider is in neutral position
     if (maxWeight < .55*RIDERWEIGHT){
       dutyRate = BASEDUTY;
+//      Serial.println("RIDER IS NEUTRAL");
     }
 
     //If not, drive the motor
@@ -243,17 +222,19 @@ void loop()
 
       //Calculate the speed fraction for forward and backwards
       if (maxIsForward){
-        speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.27*RIDERWEIGHT);
+        speedFraction = (maxWeight - .50*RIDERWEIGHT)/(.32*RIDERWEIGHT);
+        
       }
       else {
         speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.20*RIDERWEIGHT);
       }
 
       if (speedFraction > 1) speedFraction = 1.0;
+      speedFraction = pow(speedFraction, 1);
       
       //Calculate the pulse width for forwards and backwards
       if (maxIsForward){
-        extraPulseWidth = 1 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
+        extraPulseWidth = .5 * speedFraction * (DUTYRANGE-gConstStart) + gConstStart; //LINEAR IS HALF
       }
       else {
         extraPulseWidth = speedFraction * BACKWARDSRANGE;
@@ -265,6 +246,7 @@ void loop()
       }
       else {
         dutyRate = 70 - extraPulseWidth;
+        
       }
 
       //Set thresholding to prevent going too fast
@@ -274,38 +256,16 @@ void loop()
       else if (dutyRate < 62){ //TODO update this to variables
         dutyRate = 62;
       }
-
-  int testDutyNow = dutyRate;
-      // Allows you to check last N readings to trigger reset
-      gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
-      
-      //if current num is TOO different from the last num, then set current NUm to working avg
-      if (abs(gDutyAverage - dutyRate) > 10){
-        dutyRate = gDutyAverage;
-      }
-      if (abs(gLastNReadingsReset - gDutyAverage) > 10){
-        dutyRate = gLastNReadingsReset;
-      }
-
-
-
-      
-
+      gLastNReadingsAvg = (1-1/gNReadings) * gLastNReadingsAvg + (1/gNReadings) * dutyRate;
       gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
-      
     }
   }
 
   if (gRiderIsOn && (millis() - gStartTime) > 3000){
-      if (dutyRate > BASEDUTY){
-        gDutyAverage = (1-1/gNumForwardReadings) * gDutyAverage + (1/gNumForwardReadings) * dutyRate;
-      }
-      else {
-        gDutyAverage = (1-1/gNumBackwardReadings) * gDutyAverage + (1/gNumBackwardReadings) * dutyRate;
-      }
     
+    gDutyReadings[pos] = dutyRate;
     //Drive the PWM
-    int averageDutyRate = gDutyAverage;
+    int averageDutyRate = findAverage(gDutyReadings);
     
     //Cap the duty rate
     if (averageDutyRate > 100){
@@ -316,26 +276,20 @@ void loop()
     }
 
     //
-//    if (averageDutyRate > 84 && gLastNReadingsReset < 80){
-//      Serial.println("FAST");
-//      gDutyAverage = 70;
-//      Timer1.pwm(SPEEDPIN, 70);
-//    }
-    if (averageDutyRate < 75 && gLastNReadingsReset > 85){
-      gDutyAverage = 85;
-      Timer1.pwm(SPEEDPIN, 85);
+    if (averageDutyRate > 86 && gLastNReadingsAvg < 82){
+      Serial.println("FIX THIS CODE");
+      resetDutyAverage(70);
+      Timer1.pwm(SPEEDPIN, 70);
     }
     else {
       //Special brake case, if rider is actively trying to brake
-//      if ( gBrakeAverage < 65 && gLastNReadingsAvg < 75){
-//        Timer1.pwm(SPEEDPIN, 64);
-//        gDutyAverage = 64;
-//        Serial.println("MAX BREAK TRIGGERED");
-////        delay(250);
-//      }
-//      else {
+      if (gBrakeAverage < 64){
+        Timer1.pwm(SPEEDPIN, 64);
+        delay(2000);
+      }
+      else {
         Timer1.pwm(SPEEDPIN, averageDutyRate);
-//      }
+      }
     }
   }
   else {
@@ -348,11 +302,11 @@ void printGyro()
   // To read from the gyroscope, you must first call the
   // readGyro() function. When this exits, it'll update the
   // gx, gy, and gz variables with the most current data.
-  
   imu.readGyro();
   
   // Now we can use the gx, gy, and gz variables as we please.
   // Either print them as raw ADC values, or calculated in DPS.
+  Serial.print("G: ");
 #ifdef PRINT_CALCULATED
   // If you want to print calculated values, you can use the
   // calcGyro helper function to convert a raw ADC value to
@@ -430,10 +384,8 @@ void printMag()
 // http://cache.freescale.com/files/sensors/doc/app_note/AN3461.pdf?fpsp=1
 // Heading calculations taken from this app note:
 // http://www51.honeywell.com/aero/common/documents/myaerospacecatalog-documents/Defense_Brochures-documents/Magnetic__Literature_Application_notes-documents/AN203_Compass_Heading_Using_Magnetometers.pdf
-double printAttitude(float ax, float ay, float az, float mx, float my, float mz)
+void printAttitude(float ax, float ay, float az, float mx, float my, float mz)
 {
-  imu.readMag();
-  imu.readAccel();
   float roll = atan2(ay, az);
   float pitch = atan2(-ax, sqrt(ay * ay + az * az));
   
@@ -454,9 +406,9 @@ double printAttitude(float ax, float ay, float az, float mx, float my, float mz)
   pitch *= 180.0 / PI;
   roll  *= 180.0 / PI;
   
-  // Serial.print("Pitch, Roll: ");
-  // Serial.print(", ");
-  // Serial.println(roll, 2);
-  // Serial.print("Heading: "); Serial.println(heading, 2);
-  return pitch;
+  Serial.print("Pitch, Roll: ");
+  Serial.print(pitch, 2);
+  Serial.print(", ");
+  Serial.println(roll, 2);
+  Serial.print("Heading: "); Serial.println(heading, 2);
 } 
