@@ -29,6 +29,7 @@ LSM9DS1 imu;
 HX711 forwardScale(DOUT2, CLK2);
 HX711 backwardScale(DOUT, CLK);
 
+
 float calibration_factor = 9300; //-7050 worked for my 440lb max scale setup
 int RIDERWEIGHT = 15;
 
@@ -36,6 +37,7 @@ int RIDERWEIGHT = 15;
 /* Set up the throttle connections */
 char Dword;
 int dutyRate = 82;
+int rawDutyRate = 82;
 int BASEDUTY = 82;
 int MAXDUTY = 104;
 int MINDUTY = 60;
@@ -43,17 +45,17 @@ int DUTYRANGE = 23;
 int PERIOD = 18800;
 int SPEEDPIN = 9;
 int UNKNOWNPIN = 10;
-int THRESHOLDWEIGHT = 20;
+int THRESHOLDWEIGHT = 2;
 int increaseRate = 2;
 int counter = 0;
 int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
+double GYROZCALIBRATE = 5.95;
 //change this number with gNumForwardReadings
 double gDutyAverage = 82;
-double gNumForwardReadings = 30;
-double gNumBackwardReadings = 10;
-double gNAngleResetReadings = 4;
-double gNResetReadings = 10;
+double gNumForwardReadings = 20;
+double gNumBackwardReadings =8;
+double gNResetReadings = 15;
 double gLastNReadingsReset = 82;
 double gLastNAngleReadings = 0;
 double gBrakeAverage = 82;
@@ -61,6 +63,11 @@ double gNumBrakeReadings = 2;
 double gFractionForward = .85;
 double gUpHillFWDMultiplier = 2.2;
 double gDownHillFWDMultipler = 5;
+double currentTime = 0;
+double lastTime = 0;
+double firstRead = true;
+double complementaryFilterFraction = .98;
+double gBoardAngle = 0;
 
 boolean gRiderIsOn = false;
 boolean isBraking = false;
@@ -68,7 +75,11 @@ unsigned long gStartTime = 0;
 int gConstStart = 3;
 double gBoardAngleAvg = 0;
 double gNumBoardAngleReadings = 10;
-double lastDutyRate = 82;
+double gAccelX = 0;
+double gAccelY = 0;
+double gAccelZ = 0;
+double gGyroAverage = 0;
+double gGyroValue = 0;
 
 
 ////////////////////////////
@@ -82,7 +93,7 @@ double lastDutyRate = 82;
 // a declination to get a more accurate heading. Calculate 
 // your's here:
 // http://www.ngdc.noaa.gov/geomag-web/#declination
-#define DECLINATION -12.49 // Declination (degrees) in Boulder, CO.
+#define DECLINATION -12 // Declination (degrees) in Boulder, CO.
 
 
 int findAverage(int readings[]){
@@ -113,6 +124,8 @@ void setup()
   imu.settings.device.commInterface = IMU_MODE_I2C;
   imu.settings.device.mAddress = LSM9DS1_M;
   imu.settings.device.agAddress = LSM9DS1_AG;
+  imu.setGyroScale(500);
+  imu.setAccelScale(16);
 
   // Initialize scale
   forwardScale.set_scale(calibration_factor);
@@ -140,6 +153,21 @@ void setup()
   Serial.println("FINISHED SET UP");
 }
 
+void updateAccel(){
+    imu.readAccel();
+    imu.readGyro();
+    double curAccelX = imu.ax;
+    double curAccelY = 0;
+    double curAccelZ = 0;
+    if (abs(gAccelX) < 25 && abs(imu.ax) > 240){
+      curAccelX = gAccelX;
+    }
+    
+    gAccelX = (1-1/gNumBoardAngleReadings) * gAccelX + (1/gNumBoardAngleReadings) * curAccelX;
+    gAccelY = (1-1/gNumBoardAngleReadings) * gAccelY + (1/gNumBoardAngleReadings) * (imu.ay);
+    gAccelZ = (1-1/gNumBoardAngleReadings) * gAccelZ + (1/gNumBoardAngleReadings) * (imu.az);
+}
+
 
 void loop()
 {
@@ -149,17 +177,46 @@ void loop()
   //Read the current weight
   double backWeight = backwardScale.get_units() - 10;
   double forwardWeight = forwardScale.get_units() + 10;
-  float boardAngle = printAttitude(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz) - 2;
-  float testAngle = boardAngle;
-  gLastNAngleReadings = (1-1/gNAngleResetReadings) * gLastNAngleReadings + (1/gNAngleResetReadings) * boardAngle;
+  float lastAngle = gBoardAngle;
+  updateAccel();
+  
+  gBoardAngle = calculateAngle(gAccelX, gAccelY, gAccelZ, -imu.my, -imu.mx, imu.mz) + 147.7;
+  double axCorrected = imu.ax;
+  if (abs(imu.ax) > 240) axCorrected = gAccelX;
+  float testAngle = calculateAngle(axCorrected, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz) + 147.7;
   // angle fix
-  if (abs(boardAngle - gBoardAngleAvg) > 5){
-    boardAngle = gBoardAngleAvg;
+  if (abs(gBoardAngle) > 10){
+    gBoardAngle = gBoardAngleAvg;
   }
-  if (abs(gLastNAngleReadings - gBoardAngleAvg) > 5){
-    boardAngle = gLastNAngleReadings;
+  if (abs(gBoardAngle) < 2){
+    gBoardAngle = 0;
   }
-  gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * boardAngle;
+  if (abs(gBoardAngle - gBoardAngleAvg) > 3){
+    gBoardAngle = gBoardAngleAvg;
+  }
+  if (abs(gBoardAngle - lastAngle) > 3){
+    gBoardAngle = gBoardAngleAvg;
+  }
+  double gyroSwitch = gGyroValue;
+  gGyroValue = imu.calcGyro(imu.gy);
+
+  if (abs(gGyroValue) < 2){
+    gGyroValue = 0;
+  }
+  if (abs(gGyroValue) > 8){
+    gGyroValue = gGyroAverage;
+  }
+  if (abs(gGyroValue - gGyroAverage) > 4){
+    gGyroValue = gGyroAverage;
+  }
+
+  
+  gGyroAverage = (1.0/10.0)*gGyroValue + 9.0/10 * gGyroAverage;
+  double trueAngle = gyroSwitch;
+
+  
+
+  gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * gBoardAngle;
 
 
 
@@ -169,28 +226,31 @@ void loop()
 
                     //MASSIVE PRINT STATEMENT
                     counter += 1;
-      if (counter % 4 == 0){
+      if (counter % 2 == 0){
       Serial.print("WEIGHTS, ");
       Serial.print(backWeight, 2);
       Serial.print(",");
       Serial.println(forwardWeight, 2); //scale.get_units() returns a float
       Serial.print("DUTY, ");
-      Serial.print(dutyRate);
-      Serial.print(", ");
-      Serial.print(gDutyAverage);
-      Serial.print(", ");
-      Serial.println(gLastNReadingsReset);
+      Serial.println(dutyRate);
+//      Serial.print(", ");
+//      Serial.print(gDutyAverage);
+//      Serial.print(", ");
+//      Serial.print(gLastNReadingsReset);
+//      Serial.print(", ");
+//      Serial.println(rawDutyRate);
       Serial.print("ANGLE, ");
-      Serial.print(-(testAngle));
+      Serial.print((imu.ax));
       Serial.print(", ");
-      Serial.print(-(gBoardAngleAvg));
+      Serial.print((imu.ay));
       Serial.print(", ");
-
-      // Print the heading and orientation for fun!
-      // Call print attitude. The LSM9DS1's magnetometer x and y
-      // axes are opposite to the accelerometer, so my and mx are
-      // substituted for each other.
-      Serial.println(-(gLastNAngleReadings));
+      Serial.print((imu.az));
+      Serial.print(", ");
+      Serial.print((imu.gy));
+      Serial.print(", ");
+      Serial.print((imu.gz));
+      Serial.print(", ");
+      Serial.println((testAngle));
       Serial.println();
       }
 
@@ -212,8 +272,17 @@ void loop()
 
   //If rider is on, calculate the right speed
   else {
+//      if (firstRead){
+//    lastTime = millis();
+//    firstRead = false;
+//  }
+//  else {
+//    currentTime = millis();
+//    Serial.println((currentTime-lastTime));
+//    lastTime = currentTime;
+//  }
 //angle add
-      if (gBoardAngleAvg > 0) {
+  if (gBoardAngleAvg > 0) {
      forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
   }
   else {
@@ -222,7 +291,6 @@ void loop()
   RIDERWEIGHT = forwardWeight + backWeight;
     
     double maxWeight = forwardWeight;
-    lastDutyRate = dutyRate;
 
     //Calculate which direction rider is leaning
     if (backWeight > forwardWeight){
@@ -231,7 +299,7 @@ void loop()
     }
 
     //Check if rider is in neutral position
-    if (maxWeight < .55*RIDERWEIGHT){
+    if (maxWeight < .55*RIDERWEIGHT && gDutyAverage < 85 && gDutyAverage > 80){
       dutyRate = BASEDUTY;
     }
 
@@ -275,15 +343,15 @@ void loop()
         dutyRate = 62;
       }
 
-  int testDutyNow = dutyRate;
+
       // Allows you to check last N readings to trigger reset
       gLastNReadingsReset = (1-1/gNResetReadings) * gLastNReadingsReset + (1/gNResetReadings) * dutyRate;
-      
+      rawDutyRate = dutyRate;
       //if current num is TOO different from the last num, then set current NUm to working avg
       if (abs(gDutyAverage - dutyRate) > 10){
         dutyRate = gDutyAverage;
       }
-      if (abs(gLastNReadingsReset - gDutyAverage) > 10){
+      if (abs(gLastNReadingsReset - gDutyAverage) > 5){
         dutyRate = gLastNReadingsReset;
       }
 
@@ -315,27 +383,13 @@ void loop()
       averageDutyRate = 62;
     }
 
-    //
-//    if (averageDutyRate > 84 && gLastNReadingsReset < 80){
-//      Serial.println("FAST");
-//      gDutyAverage = 70;
-//      Timer1.pwm(SPEEDPIN, 70);
-//    }
     if (averageDutyRate < 75 && gLastNReadingsReset > 85){
       gDutyAverage = 85;
       Timer1.pwm(SPEEDPIN, 85);
     }
     else {
-      //Special brake case, if rider is actively trying to brake
-//      if ( gBrakeAverage < 65 && gLastNReadingsAvg < 75){
-//        Timer1.pwm(SPEEDPIN, 64);
-//        gDutyAverage = 64;
-//        Serial.println("MAX BREAK TRIGGERED");
-////        delay(250);
-//      }
-//      else {
+
         Timer1.pwm(SPEEDPIN, averageDutyRate);
-//      }
     }
   }
   else {
@@ -351,22 +405,25 @@ void printGyro()
   
   imu.readGyro();
   
+  
   // Now we can use the gx, gy, and gz variables as we please.
   // Either print them as raw ADC values, or calculated in DPS.
-#ifdef PRINT_CALCULATED
   // If you want to print calculated values, you can use the
   // calcGyro helper function to convert a raw ADC value to
   // DPS. Give the function the value that you want to convert.
+  double gyroAngle = imu.calcGyro(imu.gy);
+  gGyroAverage = (1.0/10.0)*gyroAngle + 9.0/10 * gGyroAverage;
   Serial.print(imu.calcGyro(imu.gx), 2);
   Serial.print(", ");
-  Serial.println(imu.calcGyro(imu.gy), 2);
-#elif defined PRINT_RAW
-  Serial.print(imu.gx);
+  Serial.print(imu.calcGyro(imu.gy), 2);
   Serial.print(", ");
-  Serial.print(imu.gy);
-  Serial.print(", ");
-  Serial.println(imu.gz);
-#endif
+  Serial.println(imu.calcGyro(imu.gz), 2);
+  Serial.println();
+//  Serial.print(imu.gx);
+//  Serial.print(", ");
+//  Serial.print(imu.gy);
+//  Serial.print(", ");
+//  Serial.println(imu.gz);
 }
 
 void printAccel()
@@ -374,89 +431,64 @@ void printAccel()
   // To read from the accelerometer, you must first call the
   // readAccel() function. When this exits, it'll update the
   // ax, ay, and az variables with the most current data.
-  imu.readAccel();
   
   // Now we can use the ax, ay, and az variables as we please.
   // Either print them as raw ADC values, or calculated in g's.
   Serial.print("A: ");
-#ifdef PRINT_CALCULATED
   // If you want to print calculated values, you can use the
   // calcAccel helper function to convert a raw ADC value to
   // g's. Give the function the value that you want to convert.
-  Serial.print(imu.calcAccel(imu.ax), 2);
-  Serial.print(", ");
-  Serial.println(imu.calcAccel(imu.ay), 2);
-#elif defined PRINT_RAW 
+//  Serial.print(imu.calcAccel(imu.ax), 5);
+//  Serial.print(", ");
+//  Serial.print(imu.calcAccel(imu.ay + 70), 5);
+//  Serial.print(", ");
+//  Serial.println(imu.calcAccel(imu.az-1360), 5);
   Serial.print(imu.ax);
   Serial.print(", ");
-  Serial.print(imu.ay);
+  Serial.print(imu.ay+70);
   Serial.print(", ");
-  Serial.println(imu.az);
-#endif
-
-}
-
-void printMag()
-{
-  // To read from the magnetometer, you must first call the
-  // readMag() function. When this exits, it'll update the
-  // mx, my, and mz variables with the most current data.
-  imu.readMag();
+  Serial.println(imu.az-1360);
+    Serial.print(gAccelX);
+  Serial.print(", ");
+  Serial.print(gAccelY);
+  Serial.print(", ");
+  Serial.println(gAccelZ);
   
-  // Now we can use the mx, my, and mz variables as we please.
-  // Either print them as raw ADC values, or calculated in Gauss.
-  Serial.print("M: ");
-#ifdef PRINT_CALCULATED
-  // If you want to print calculated values, you can use the
-  // calcMag helper function to convert a raw ADC value to
-  // Gauss. Give the function the value that you want to convert.
-  Serial.print(imu.calcMag(imu.mx), 2);
-  Serial.print(", ");
-  Serial.print(imu.calcMag(imu.my), 2);
-  Serial.print(", ");
-  Serial.print(imu.calcMag(imu.mz), 2);
-  Serial.println(" gauss");
-#elif defined PRINT_RAW
-  Serial.print(imu.mx);
-  Serial.print(", ");
-  Serial.print(imu.my);
-  Serial.print(", ");
-  Serial.println(imu.mz);
-#endif
+
 }
+
 
 // Calculate pitch, roll, and heading.
 // Pitch/roll calculations take from this app note:
 // http://cache.freescale.com/files/sensors/doc/app_note/AN3461.pdf?fpsp=1
 // Heading calculations taken from this app note:
 // http://www51.honeywell.com/aero/common/documents/myaerospacecatalog-documents/Defense_Brochures-documents/Magnetic__Literature_Application_notes-documents/AN203_Compass_Heading_Using_Magnetometers.pdf
-double printAttitude(float ax, float ay, float az, float mx, float my, float mz)
+double calculateAngle(float ax, float ay, float az, float mx, float my, float mz)
 {
-  imu.readMag();
-  imu.readAccel();
   float roll = atan2(ay, az);
-  float pitch = atan2(-ax, sqrt(ay * ay + az * az));
+  float pitch = atan2(-ax, sqrt(ay * ay + (az) * az));
   
-  float heading;
-  if (my == 0)
-    heading = (mx < 0) ? 180.0 : 0;
-  else
-    heading = atan2(mx, my);
-    
-  heading -= DECLINATION * PI / 180;
-  
-  if (heading > PI) heading -= (2 * PI);
-  else if (heading < -PI) heading += (2 * PI);
-  else if (heading < 0) heading += 2 * PI;
-  
-  // Convert everything from radians to degrees:
-  heading *= 180.0 / PI;
+//  float heading;
+//  if (my == 0)
+//    heading = (mx < 0) ? 180.0 : 0;
+//  else
+//    heading = atan2(mx, my);
+//    
+//  heading -= DECLINATION * PI / 180;
+//  
+//  if (heading > PI) heading -= (2 * PI);
+//  else if (heading < -PI) heading += (2 * PI);
+//  else if (heading < 0) heading += 2 * PI;
+//  
+//  // Convert everything from radians to degrees:
+//  heading *= 180.0 / PI;
   pitch *= 180.0 / PI;
   roll  *= 180.0 / PI;
-  
-  // Serial.print("Pitch, Roll: ");
-  // Serial.print(", ");
-  // Serial.println(roll, 2);
-  // Serial.print("Heading: "); Serial.println(heading, 2);
-  return pitch;
+//  
+//   Serial.print("Pitch, Roll: ");
+//   Serial.print(pitch, 2);
+//   Serial.print(", ");
+//   Serial.println(roll, 2);
+
+  return -(pitch+148);
 } 

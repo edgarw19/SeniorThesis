@@ -154,7 +154,7 @@ print(len(derivAngle))
 xNumberFix = xNumber[0:len(xNumber)-1]
 xFixed = []
 print(len(xNumberFix))
-weightUsed = derivBackward
+weightUsed = derivForward
 plt.plot(np.array(xNumberFix), np.array(weightUsed),                             
         'black',                       # colour
         linestyle='--',                    # line style
