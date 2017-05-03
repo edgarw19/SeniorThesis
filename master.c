@@ -180,10 +180,10 @@ void loop()
   float lastAngle = gBoardAngle;
   updateAccel();
   
-  gBoardAngle = calculateAngle(gAccelX, gAccelY, gAccelZ, -imu.my, -imu.mx, imu.mz) + 147.7;
+  gBoardAngle = calculateAngle(gAccelX, gAccelY, gAccelZ, -imu.my, -imu.mx, imu.mz);
   double axCorrected = imu.ax;
   if (abs(imu.ax) > 240) axCorrected = gAccelX;
-  float testAngle = calculateAngle(axCorrected, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz) + 147.7;
+  float testAngle = calculateAngle(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
   // angle fix
   if (abs(gBoardAngle) > 10){
     gBoardAngle = gBoardAngleAvg;
@@ -490,5 +490,5 @@ double calculateAngle(float ax, float ay, float az, float mx, float my, float mz
 //   Serial.print(", ");
 //   Serial.println(roll, 2);
 
-  return -(pitch+148);
+  return (pitch);
 } 
