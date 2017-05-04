@@ -50,6 +50,7 @@ int increaseRate = 2;
 int counter = 0;
 int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
+double SENSITIVITY = 0.000732;
 double GYROZCALIBRATE = 5.95;
 //change this number with gNumForwardReadings
 double gDutyAverage = 82;
@@ -77,7 +78,7 @@ double gBoardAngleAvg = 0;
 double gNumBoardAngleReadings = 10;
 double gAccelX = 0;
 double gAccelY = 0;
-double gAccelZ = 0;
+double gAccelZ = 1.2;
 double gGyroAverage = 0;
 double gGyroValue = 0;
 
@@ -111,6 +112,100 @@ double findDirection(int readings[]){
     sum += readings[i];
   }
   return sum/gNumForwardReadings;
+}
+
+double lowPassFilter(double currentValue,double average,double fraction){
+  double averagedValue = (1 - 1.0/fraction) * average + (1.0/fraction) * currentValue;
+  return averagedValue;
+}
+
+
+
+double generateAverages(double average, double lastValue,double currentValue,double weighting,double differentialUP,double differentialDOWN,double upperBound,double errorMargin,double subtractNorm){
+
+  if (abs(currentValue - lastValue) > differentialUP){
+    if ((currentValue - lastValue) > 0){
+        currentValue = average;
+//        Serial.println("REMOVED UP");
+      }
+  }
+  else if (abs(currentValue - lastValue) > differentialDOWN){
+      if ((currentValue - lastValue) < 0){
+//        Serial.println("REMOVED DOWN");
+        currentValue = average;
+      }
+  }
+
+  if (abs(currentValue-subtractNorm) > upperBound){
+      currentValue = upperBound;
+  }
+
+  if (abs(currentValue - average) > errorMargin){ 
+//    Serial.println("REMOVED ERROR");
+      if ((currentValue - average) > 0 ){
+        currentValue  = average + errorMargin;
+      }
+      else{
+        currentValue = average- errorMargin;
+      }
+  }
+  double averagedValue = lowPassFilter(currentValue, average, weighting);
+  return averagedValue;
+}
+
+double generateAveragesX(double average, double lastValue,double currentValue,double weighting,double differentialUP,double differentialDOWN,double upperBound,double errorMargin,double subtractNorm){
+
+  if (abs(currentValue - lastValue) > differentialUP){
+    if ((currentValue - lastValue) > 0){
+        currentValue = average;
+//        Serial.println("REMOVED UP");
+      }
+  }
+  else if (abs(currentValue - lastValue) > differentialDOWN){
+      if ((currentValue - lastValue) < 0){
+//        Serial.println("REMOVED DOWN");
+        currentValue = average;
+      }
+  }
+
+  if (abs(currentValue-subtractNorm) > upperBound){
+      currentValue = upperBound;
+  }
+
+  if (abs(currentValue - average) > errorMargin){ 
+//    Serial.println("REMOVED ERROR");
+      if ((currentValue - average) > 0 ){
+        currentValue  = average;
+      }
+      else{
+        currentValue = average;
+      }
+  }
+  double averagedValue = lowPassFilter(currentValue, average, weighting);
+  return averagedValue;
+}
+
+double generateAveragesZ(double average, double lastValue,double currentValue,double weighting,double differential,double differentialScaling,double upperBound,double errorMargin,double subtractNorm){
+
+  if (abs(currentValue - lastValue) > differential){
+    lastValue += (currentValue - lastValue) * differentialScaling;
+  }
+
+  if (abs(currentValue-subtractNorm) > upperBound){
+      currentValue = upperBound;
+  }
+
+  if (abs(currentValue - average) > errorMargin){ 
+//    Serial.println("REMOVED ERROR");
+      if ((currentValue - average) > 0 ){
+        currentValue  = average + errorMargin;
+      }
+      else{
+        currentValue = average- errorMargin;
+      }
+  }
+  double averagedValue = lowPassFilter(currentValue, average, weighting);
+  return averagedValue;
 }
 
 
@@ -154,18 +249,31 @@ void setup()
 }
 
 void updateAccel(){
+    double lastAccelX = imu.ax * SENSITIVITY;
+    double lastAccelY = imu.ay* SENSITIVITY;
+    double lastAccelZ = imu.az * SENSITIVITY;
     imu.readAccel();
     imu.readGyro();
-    double curAccelX = imu.ax;
-    double curAccelY = 0;
-    double curAccelZ = 0;
-    if (abs(gAccelX) < 25 && abs(imu.ax) > 240){
-      curAccelX = gAccelX;
-    }
-    
-    gAccelX = (1-1/gNumBoardAngleReadings) * gAccelX + (1/gNumBoardAngleReadings) * curAccelX;
-    gAccelY = (1-1/gNumBoardAngleReadings) * gAccelY + (1/gNumBoardAngleReadings) * (imu.ay);
-    gAccelZ = (1-1/gNumBoardAngleReadings) * gAccelZ + (1/gNumBoardAngleReadings) * (imu.az);
+    double curAccelX = imu.ax * SENSITIVITY;
+    double curAccelY = imu.ay * SENSITIVITY;
+    double curAccelZ = imu.az * SENSITIVITY;
+
+//    Serial.println("X_____");
+//    Serial.print("CUR B4 FUNCTION, ");
+//    Serial.println(curAccelX);
+    gAccelX = generateAveragesX(gAccelX, lastAccelX, curAccelX, 5, .1, .015, .5, .1, 0);
+//    Serial.println(gAccelX);
+//    Serial.println();
+
+//    Serial.println("Z______________");
+    gAccelZ = generateAveragesZ(gAccelZ, lastAccelZ, curAccelZ, 15, .5, .5, 3, .5, 1.2);
+//    Serial.println(gAccelY);
+//    Serial.println();
+//  
+//    Serial.println("Y_____________ ");
+    gAccelY = generateAverages(gAccelY, lastAccelY, curAccelY, 10, 100, 100, 100, 100, 0);
+//    Serial.println(gAccelY);
+//    Serial.println();
 }
 
 
@@ -181,42 +289,11 @@ void loop()
   updateAccel();
   
   gBoardAngle = calculateAngle(gAccelX, gAccelY, gAccelZ, -imu.my, -imu.mx, imu.mz);
-  double axCorrected = imu.ax;
-  if (abs(imu.ax) > 240) axCorrected = gAccelX;
   float testAngle = calculateAngle(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
-  // angle fix
-  if (abs(gBoardAngle) > 10){
-    gBoardAngle = gBoardAngleAvg;
-  }
-  if (abs(gBoardAngle) < 2){
-    gBoardAngle = 0;
-  }
-  if (abs(gBoardAngle - gBoardAngleAvg) > 3){
-    gBoardAngle = gBoardAngleAvg;
-  }
-  if (abs(gBoardAngle - lastAngle) > 3){
-    gBoardAngle = gBoardAngleAvg;
-  }
-  double gyroSwitch = gGyroValue;
-  gGyroValue = imu.calcGyro(imu.gy);
-
-  if (abs(gGyroValue) < 2){
-    gGyroValue = 0;
-  }
-  if (abs(gGyroValue) > 8){
-    gGyroValue = gGyroAverage;
-  }
-  if (abs(gGyroValue - gGyroAverage) > 4){
-    gGyroValue = gGyroAverage;
-  }
-
-  
-  gGyroAverage = (1.0/10.0)*gGyroValue + 9.0/10 * gGyroAverage;
-  double trueAngle = gyroSwitch;
 
   
 
-  gBoardAngleAvg = (1-1/gNumBoardAngleReadings) * gBoardAngleAvg + (1/gNumBoardAngleReadings) * gBoardAngle;
+  gBoardAngleAvg = generateAverages(gBoardAngleAvg, lastAngle, gBoardAngle, 5, 1.5, 1.5, 10, 1.5, 0);
 
 
 
@@ -227,12 +304,12 @@ void loop()
                     //MASSIVE PRINT STATEMENT
                     counter += 1;
       if (counter % 2 == 0){
-      Serial.print("WEIGHTS, ");
-      Serial.print(backWeight, 2);
-      Serial.print(",");
-      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-      Serial.print("DUTY, ");
-      Serial.println(dutyRate);
+//      Serial.print("WEIGHTS, ");
+//      Serial.print(backWeight, 2);
+//      Serial.print(",");
+//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+//      Serial.print("DUTY, ");
+//      Serial.println(dutyRate);
 //      Serial.print(", ");
 //      Serial.print(gDutyAverage);
 //      Serial.print(", ");
@@ -246,11 +323,9 @@ void loop()
       Serial.print(", ");
       Serial.print((imu.az));
       Serial.print(", ");
-      Serial.print((imu.gy));
+      Serial.print((testAngle));
       Serial.print(", ");
-      Serial.print((imu.gz));
-      Serial.print(", ");
-      Serial.println((testAngle));
+      Serial.print(gBoardAngleAvg);
       Serial.println();
       }
 
@@ -259,10 +334,6 @@ void loop()
     dutyRate = BASEDUTY;
     gDutyAverage = BASEDUTY;
     gRiderIsOn = false;
-//    Serial.println("RIDER NOT ON");
-//          Serial.print(backWeight, 2);
-//      Serial.print(",");
-//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
   }
   else if (RIDERWEIGHT >= THRESHOLDWEIGHT && !gRiderIsOn){
     gDutyAverage = BASEDUTY;
@@ -272,22 +343,14 @@ void loop()
 
   //If rider is on, calculate the right speed
   else {
-//      if (firstRead){
-//    lastTime = millis();
-//    firstRead = false;
-//  }
-//  else {
-//    currentTime = millis();
-//    Serial.println((currentTime-lastTime));
-//    lastTime = currentTime;
-//  }
+
 //angle add
-  if (gBoardAngleAvg > 0) {
-     forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
-  }
-  else {
-     forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
-  }
+  // if (gBoardAngleAvg > 0) {
+  //    forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
+  // }
+  // else {
+  //    forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
+  // }
   RIDERWEIGHT = forwardWeight + backWeight;
     
     double maxWeight = forwardWeight;
@@ -354,11 +417,6 @@ void loop()
       if (abs(gLastNReadingsReset - gDutyAverage) > 5){
         dutyRate = gLastNReadingsReset;
       }
-
-
-
-      
-
       gBrakeAverage = (1-1/gNumBrakeReadings) * gBrakeAverage + (1/gNumBrakeReadings) * dutyRate;
       
     }
@@ -397,65 +455,8 @@ void loop()
   }
 }
 
-void printGyro()
-{
-  // To read from the gyroscope, you must first call the
-  // readGyro() function. When this exits, it'll update the
-  // gx, gy, and gz variables with the most current data.
-  
-  imu.readGyro();
-  
-  
-  // Now we can use the gx, gy, and gz variables as we please.
-  // Either print them as raw ADC values, or calculated in DPS.
-  // If you want to print calculated values, you can use the
-  // calcGyro helper function to convert a raw ADC value to
-  // DPS. Give the function the value that you want to convert.
-  double gyroAngle = imu.calcGyro(imu.gy);
-  gGyroAverage = (1.0/10.0)*gyroAngle + 9.0/10 * gGyroAverage;
-  Serial.print(imu.calcGyro(imu.gx), 2);
-  Serial.print(", ");
-  Serial.print(imu.calcGyro(imu.gy), 2);
-  Serial.print(", ");
-  Serial.println(imu.calcGyro(imu.gz), 2);
-  Serial.println();
-//  Serial.print(imu.gx);
-//  Serial.print(", ");
-//  Serial.print(imu.gy);
-//  Serial.print(", ");
-//  Serial.println(imu.gz);
-}
 
-void printAccel()
-{
-  // To read from the accelerometer, you must first call the
-  // readAccel() function. When this exits, it'll update the
-  // ax, ay, and az variables with the most current data.
-  
-  // Now we can use the ax, ay, and az variables as we please.
-  // Either print them as raw ADC values, or calculated in g's.
-  Serial.print("A: ");
-  // If you want to print calculated values, you can use the
-  // calcAccel helper function to convert a raw ADC value to
-  // g's. Give the function the value that you want to convert.
-//  Serial.print(imu.calcAccel(imu.ax), 5);
-//  Serial.print(", ");
-//  Serial.print(imu.calcAccel(imu.ay + 70), 5);
-//  Serial.print(", ");
-//  Serial.println(imu.calcAccel(imu.az-1360), 5);
-  Serial.print(imu.ax);
-  Serial.print(", ");
-  Serial.print(imu.ay+70);
-  Serial.print(", ");
-  Serial.println(imu.az-1360);
-    Serial.print(gAccelX);
-  Serial.print(", ");
-  Serial.print(gAccelY);
-  Serial.print(", ");
-  Serial.println(gAccelZ);
-  
 
-}
 
 
 // Calculate pitch, roll, and heading.
@@ -468,27 +469,9 @@ double calculateAngle(float ax, float ay, float az, float mx, float my, float mz
   float roll = atan2(ay, az);
   float pitch = atan2(-ax, sqrt(ay * ay + (az) * az));
   
-//  float heading;
-//  if (my == 0)
-//    heading = (mx < 0) ? 180.0 : 0;
-//  else
-//    heading = atan2(mx, my);
-//    
-//  heading -= DECLINATION * PI / 180;
-//  
-//  if (heading > PI) heading -= (2 * PI);
-//  else if (heading < -PI) heading += (2 * PI);
-//  else if (heading < 0) heading += 2 * PI;
-//  
-//  // Convert everything from radians to degrees:
-//  heading *= 180.0 / PI;
   pitch *= 180.0 / PI;
   roll  *= 180.0 / PI;
-//  
-//   Serial.print("Pitch, Roll: ");
-//   Serial.print(pitch, 2);
-//   Serial.print(", ");
-//   Serial.println(roll, 2);
 
-  return (pitch);
+
+  return -(pitch+1);
 } 

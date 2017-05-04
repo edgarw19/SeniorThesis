@@ -41,7 +41,6 @@ with open("test.txt") as f:
                                 currentAngle.append(float(splitLine[1]))
                                 totalAngleAverage.append(float(splitLine[2]))
                                 lastNAngleAverage.append(float(splitLine[3]))
-                                notCorrectedAngle.append(float(splitLine[3]))
                         if (splitLine[0] == "WEIGHTS"):
                                 backwardWeights.append(float(splitLine[1])/20)
                                 forwardWeights.append(float(splitLine[2])/20)

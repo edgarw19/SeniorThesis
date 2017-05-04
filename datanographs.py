@@ -95,52 +95,6 @@ def generateAverages(startingAverage, values, weighting, differential, lowerBoun
         print("ERRORMARGIN CORRECTION: " + str(errorMarginCorrection))
         return averageValues
 
-def generateAveragesAngle(startingAverage, values, weighting, differential, lowerBound, upperBound, errorMargin, subtractNorm):
-        average = startingAverage
-        averageValues = []
-
-        # Check corrections
-        differentialCorrection = 0
-        lowerBoundCorrection = 0
-        upperBoundCorrection = 0
-        errorMarginCorrection = 0
-
-
-        for i in range(0, len(values)):
-                currentValue = values[i]
-                lastValue = currentValue
-                if (i > 0):
-                        lastValue = values[i-1]
-                # correctedValue = correctValue(currentValue, lastValue, differential, lowerBound, upperBound, average, errorMargin)
-                
-                if (abs(currentValue - lastValue) > differential):
-                        currentValue = average
-                        differentialCorrection += 1
-
-                # if (abs(currentValue-subtractNorm) < lowerBound):
-                #         currentValue = average
-                #         lowerBoundCorrection += 1
-
-                if (abs(currentValue-subtractNorm) > upperBound):
-                        currentValue = upperBound
-                        upperBoundCorrection += 1
-
-                if (abs(currentValue - average) > errorMargin):
-                        if (currentValue - average) > 0:
-                            currentValue  = average + errorMargin
-                        else:
-                            currentValue = average- errorMargin
-                        errorMarginCorrection += 1
-
-                average = lowPassFilter(currentValue, average, weighting)
-                averageValues.append(average)
-
-
-        print("DIFFERENTIAL CORRECTION: " + str(differentialCorrection))
-        print("LOWERBOUND CORRECTION: " + str(lowerBoundCorrection))
-        print("UPPERBOUND CORRECTION: " + str(upperBoundCorrection))
-        print("ERRORMARGIN CORRECTION: " + str(errorMarginCorrection))
-        return averageValues
 
 def generateAveragesX(startingAverage, values, weighting, differentialUP, differentialDown, upperBound, errorMargin, subtractNorm):
         average = startingAverage
@@ -282,7 +236,7 @@ def main(argv):
 
         i = 0
         # Grab the values
-        with open("finalFlatground1.txt") as f:
+        with open("test.txt") as f:
                 for line in f:
                         if (len(line) > 1):
                                 splitLine = line.split(",")
@@ -292,9 +246,8 @@ def main(argv):
                                         axValues.append(float(splitLine[1]) * 0.000732)
                                         ayValues.append(float(splitLine[2]) * 0.000732)
                                         azValues.append(float(splitLine[3]) * 0.000732)
-                                        gyValues.append(float(splitLine[4]))
-                                        gzValues.append(float(splitLine[5]))
-                                        angleValues.append(float(splitLine[6])/15)
+
+                                        angleValues.append(float(splitLine[4])/15)
                                 if (splitLine[0] == "WEIGHTS"):
                                     backwardWeights.append(float(splitLine[1])/20)
                                     forwardWeights.append(float(splitLine[2])/20)
@@ -325,7 +278,7 @@ def main(argv):
         axAverage = generateAveragesX(0, axValues, xWeighting, differentialUPX, differentialDownX, upperBoundX, errorMarginX, 0)
        
         print
-        ayAverage = generateAverages(.5, ayValues, 10, 100, 0, 100, 100, .5)
+        ayAverage = generateAverages(0, ayValues, 10, 100, 0, 100, 100, 0)
         backwardWeightAvg = generateAverages(80, backwardWeights, 10, 50, 0, 200, 200, 80)
 
 
@@ -343,12 +296,12 @@ def main(argv):
         # calcAvgAngleValues = generateAveragesV2(0, calcAvgAngleValues, 15, )
 
         print("ANGLE AVERAGE")
-        angleAverage = generateAveragesAngle(0, calcAvgAngleValues, 5, 1.5, .5, 10, 1.5, 0)
+        angleAverage = generateAverages(0, calcAvgAngleValues, 5, 1.5, .5, 30, 1.5, 0)
         totalAccelerationAvg = generateAverages(1.2, totalAcceleration, 10, 2, .1, 5, 1, 1)
 
 
-        for x in range(0, len(angleAverage)):
-            print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
+        # for x in range(0, len(angleAverage)):
+        #     print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
 
         # Calculate RMSE FOR VARIOUS ACCOUNTS
         rmseRawAngle = 0
@@ -487,6 +440,10 @@ def main(argv):
             az = azValues[i]
             totalAcceleration.append(math.sqrt(az*az+ay*ay+az*az))
 
+        print("Y ORIGINAL")
+        for i in range(0, 300):
+            print('%.3f,' % azValues[i])
+
 
         azAverage = generateAveragesV2(1.2, azValues, 15, .5, .5, .1, 3, .5, 1.2)
         # azAverage = generateAverages(1.2, azValues, 10, 100, 0, 100, 100, 1.2)
@@ -497,6 +454,8 @@ def main(argv):
 
         axAverage = generateAveragesX(0, axValues, xWeighting, differentialUPX, differentialDownX, upperBoundX, errorMarginX, 0)
        
+        print("Y AVERAGE")
+        print(azAverage[0:300])
         print
         ayAverage = generateAverages(.5, ayValues, 10, 100, 0, 100, 100, .5)
         backwardWeightAvg = generateAverages(80, backwardWeights, 10, 50, 0, 200, 200, 80)
@@ -516,12 +475,12 @@ def main(argv):
         # calcAvgAngleValues = generateAveragesV2(0, calcAvgAngleValues, 15, )
 
         print("ANGLE AVERAGE")
-        angleAverage = generateAveragesAngle(0, calcAvgAngleValues, 5, 1.5, .5, 10, 1.5, 0)
+        angleAverage = generateAverages(0, calcAvgAngleValues, 5, 1.5, .5, 30, 1.5, 0)
         totalAccelerationAvg = generateAverages(1.2, totalAcceleration, 10, 2, .1, 5, 1, 1)
 
 
-        for x in range(0, len(angleAverage)):
-            print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
+        # for x in range(0, len(angleAverage)):
+        #     print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
 
         # Calculate RMSE FOR VARIOUS ACCOUNTS
         rmseRawAngle = 0
@@ -627,7 +586,6 @@ def main(argv):
         # Calculate the averages
        
         # def generateAverages(average, values, weighting, differential, lowerBound, upperBound, errorMargin, subtractNorm):
-        # def generateAveragesV2(startingAverage, values, weighting, differential, differentialScaling, lowerBound, upperBound, errorMargin, subtractNorm):
 
         totalAcceleration = []
         totalAccelerationAvg = []
@@ -649,7 +607,6 @@ def main(argv):
        
         print
         ayAverage = generateAverages(.5, ayValues, 10, 100, 0, 100, 100, .5)
-        backwardWeightAvg = generateAverages(80, backwardWeights, 10, 50, 0, 200, 200, 80)
 
 
 
@@ -663,15 +620,14 @@ def main(argv):
                 angle = calcAngle(axAverage[i], ayAverage[i], azAverage[i])
                 calcAvgAngleValues.append(-(angle+1))
 
-        # calcAvgAngleValues = generateAveragesV2(0, calcAvgAngleValues, 15, )
 
         print("ANGLE AVERAGE")
-        angleAverage = generateAveragesAngle(0, calcAvgAngleValues, 5, 1.5, .5, 10, 1.5, 0)
+        angleAverage = generateAverages(0, calcAvgAngleValues, 5, 1.5, .5, 30, 1.5, 0)
         totalAccelerationAvg = generateAverages(1.2, totalAcceleration, 10, 2, .1, 5, 1, 1)
 
 
-        for x in range(0, len(angleAverage)):
-            print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
+        # for x in range(0, len(angleAverage)):
+        #     print(str(axAverage[x]) + ", " + str(ayAverage[x]) + ", " + str(azAverage[x])  + ", " + str(calcAvgAngleValues[x]) + ", " + str(angleAverage[x]))
 
         # Calculate RMSE FOR VARIOUS ACCOUNTS
         rmseRawAngle = 0
