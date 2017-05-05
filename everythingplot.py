@@ -30,7 +30,7 @@ printDutyRates = False
 
 i = 0
 # Add values to the training bag
-with open("test.txt") as f:
+with open("fridownhill2.txt") as f:
         for line in f:
                 if (len(line) > 1):
                         splitLine = line.split(",")
@@ -44,10 +44,7 @@ with open("test.txt") as f:
                         if (splitLine[0] == "ANGLE"):
                                 xNumber.append(i)
                                 i += 1
-                                currentAngle.append(float(splitLine[1]))
-                                totalAngleAverage.append(float(splitLine[2]))
-                                lastNAngleAverage.append(float(splitLine[3]))
-                                notCorrectedAngle.append(float(splitLine[4]))
+                                totalAngleAverage.append(float(splitLine[5]))
                         if (splitLine[0] == "WEIGHTS"):
                                 backwardWeights.append(float(splitLine[1])/6)
                                 forwardWeights.append(float(splitLine[2])/6)
@@ -90,35 +87,35 @@ titlefont = {
 
 
 
-# plt.plot(np.array(xNumber), np.array(currentDutyRate),                             
-#         'green',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='Current')      # plot label
+plt.plot(np.array(xNumber), np.array(currentDutyRate),                             
+        'green',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='Current')      # plot label
 
-# plt.plot(np.array(xNumber), np.array(totalDutyAverage),                             
-#         'blue',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='Average')      # plot label
+plt.plot(np.array(xNumber), np.array(totalDutyAverage),                             
+        'blue',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='Average')      # plot label
 
-# plt.plot(np.array(xNumber), np.array(lastNDutyAverage),                             
-#         'red',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='Last N Average')      # plot label
+plt.plot(np.array(xNumber), np.array(lastNDutyAverage),                             
+        'red',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='Last N Average')      # plot label
 
-# plt.plot(np.array(xNumber), np.array(notCorrectedDutyRate),                             
-#         'black',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='Uncorrected')      # plot label
+plt.plot(np.array(xNumber), np.array(notCorrectedDutyRate),                             
+        'black',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='Uncorrected')      # plot label
 
-# plt.xlabel('Time', fontdict=labelfont)
-# plt.title('Duty Rates', fontdict=titlefont) 
-# plt.ylabel('Duty Rate', fontdict=labelfont)
-# axes = plt.gca()
-# axes.set_xlim([0, len(xNumber)])            # x-axis bounds
-# axes.set_ylim([55, 105])    
+plt.xlabel('Time', fontdict=labelfont)
+plt.title('Duty Rates', fontdict=titlefont) 
+plt.ylabel('Duty Rate', fontdict=labelfont)
+axes = plt.gca()
+axes.set_xlim([0, len(xNumber)])            # x-axis bounds
+axes.set_ylim([55, 105])    
 
-#         # x-axis bounds
-# legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
+        # x-axis bounds
+legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
 
 
 # SECOND ONE
@@ -136,10 +133,10 @@ plt.figure(1)
 #         linestyle='--',                    # line style
 #         linewidth=3, label='Average')      # plot label
 
-# plt.plot(np.array(xNumber), np.array(lastNAngleAverage),                             
-#         'red',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='Filtered')      # plot label
+plt.plot(np.array(xNumber), np.array(lastNAngleAverage),                             
+        'red',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='Filtered')      # plot label
 
 # plt.plot(np.array(xNumber), np.array(notCorrectedAngle),                             
 #         'black',                       # colour
@@ -149,16 +146,16 @@ plt.figure(1)
 
 
 
-print(len(xNumber))
-print(len(derivAngle))
-xNumberFix = xNumber[0:len(xNumber)-1]
-xFixed = []
-print(len(xNumberFix))
-weightUsed = derivForward
-plt.plot(np.array(xNumberFix), np.array(weightUsed),                             
-        'black',                       # colour
-        linestyle='--',                    # line style
-        linewidth=3, label='deriv back')      # plot label
+# print(len(xNumber))
+# print(len(derivAngle))
+# xNumberFix = xNumber[0:len(xNumber)-1]
+# xFixed = []
+# print(len(xNumberFix))
+# weightUsed = derivForward
+# plt.plot(np.array(xNumberFix), np.array(weightUsed),                             
+#         'black',                       # colour
+#         linestyle='--',                    # line style
+#         linewidth=3, label='deriv back')      # plot label
 
 
 
@@ -230,31 +227,31 @@ legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
 
 # THIRD ONE
 
-# plt.figure(2)
+plt.figure(2)
 
 
-#                 #Transmission Powers
-# plt.plot(np.array(xNumber), np.array(backwardWeights),                             
-#         'green',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='backward')      # plot label
+                #Transmission Powers
+plt.plot(np.array(xNumber), np.array(backwardWeights),                             
+        'green',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='backward')      # plot label
 
-# plt.plot(np.array(xNumber), np.array(forwardWeights),                             
-#         'blue',                       # colour
-#         linestyle='--',                    # line style
-#         linewidth=3, label='forward')      # plot label
+plt.plot(np.array(xNumber), np.array(forwardWeights),                             
+        'blue',                       # colour
+        linestyle='--',                    # line style
+        linewidth=3, label='forward')      # plot label
 
-# plt.xlabel('Time', fontdict=labelfont)
-# plt.title('Weights', fontdict=titlefont) 
-# plt.ylabel('Weights', fontdict=labelfont)
-# axes = plt.gca()
-# axes.set_xlim([0, len(xNumber)])            # x-axis bounds
-# axes.set_ylim([0, 175])    
+plt.xlabel('Time', fontdict=labelfont)
+plt.title('Weights', fontdict=titlefont) 
+plt.ylabel('Weights', fontdict=labelfont)
+axes = plt.gca()
+axes.set_xlim([0, len(xNumber)])            # x-axis bounds
+axes.set_ylim([0, 175])    
 
 
 
-#         # x-axis bounds
-# legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
+        # x-axis bounds
+legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
 
 
 plt.show()

@@ -62,8 +62,8 @@ double gLastNAngleReadings = 0;
 double gBrakeAverage = 82;
 double gNumBrakeReadings = 2;
 double gFractionForward = .85;
-double gUpHillFWDMultiplier = 2.2;
-double gDownHillFWDMultipler = 5;
+double gUpHillFWDMultiplier = 10;
+double gDownHillFWDMultipler = 3;
 double currentTime = 0;
 double lastTime = 0;
 double firstRead = true;
@@ -137,7 +137,12 @@ double generateAverages(double average, double lastValue,double currentValue,dou
   }
 
   if (abs(currentValue-subtractNorm) > upperBound){
-      currentValue = upperBound;
+      if ((currentValue-subtractNorm) > 0){
+        currentValue = upperBound;
+      }
+      else {
+        currentValue = -upperBound;
+      }
   }
 
   if (abs(currentValue - average) > errorMargin){ 
@@ -303,19 +308,19 @@ void loop()
 
                     //MASSIVE PRINT STATEMENT
                     counter += 1;
-      if (counter % 2 == 0){
-//      Serial.print("WEIGHTS, ");
-//      Serial.print(backWeight, 2);
-//      Serial.print(",");
-//      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
-//      Serial.print("DUTY, ");
-//      Serial.println(dutyRate);
-//      Serial.print(", ");
-//      Serial.print(gDutyAverage);
-//      Serial.print(", ");
-//      Serial.print(gLastNReadingsReset);
-//      Serial.print(", ");
-//      Serial.println(rawDutyRate);
+      if (counter % 3 == 0){
+      Serial.print("WEIGHTS, ");
+      Serial.print(backWeight, 2);
+      Serial.print(",");
+      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+      Serial.print("DUTY, ");
+      Serial.print(dutyRate);
+      Serial.print(", ");
+      Serial.print(gDutyAverage);
+      Serial.print(", ");
+      Serial.print(gLastNReadingsReset);
+      Serial.print(", ");
+      Serial.println(rawDutyRate);
       Serial.print("ANGLE, ");
       Serial.print((imu.ax));
       Serial.print(", ");
@@ -325,7 +330,7 @@ void loop()
       Serial.print(", ");
       Serial.print((testAngle));
       Serial.print(", ");
-      Serial.print(gBoardAngleAvg);
+      Serial.println(gBoardAngleAvg);
       Serial.println();
       }
 
@@ -345,12 +350,12 @@ void loop()
   else {
 
 //angle add
-  // if (gBoardAngleAvg > 0) {
-  //    forwardWeight -= gUpHillFWDMultiplier * gBoardAngleAvg;
-  // }
-  // else {
-  //    forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
-  // }
+   if (gBoardAngleAvg > 1.5) {
+      forwardWeight += gUpHillFWDMultiplier * gBoardAngleAvg;
+   }
+   else if (gBoardAngleAvg < -1.5){
+      forwardWeight += gDownHillFWDMultipler * gBoardAngleAvg;
+   }
   RIDERWEIGHT = forwardWeight + backWeight;
     
     double maxWeight = forwardWeight;

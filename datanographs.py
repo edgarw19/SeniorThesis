@@ -335,36 +335,38 @@ def main(argv):
                 }
 
         plt.xlabel('Time', fontdict=labelfont)
-        plt.title('G readings Flat Ground', fontdict=titlefont) 
-        plt.ylabel('G', fontdict=labelfont)
+        plt.title('Angle readings Flat Ground (-.5 degrees)', fontdict=titlefont) 
+        plt.ylabel('Angle', fontdict=labelfont)
         axes = plt.gca()
         axes.set_xlim([0, len(xNumber)])            # x-axis bounds
         axes.set_ylim([-6, 6])    
 
-        plt.plot(np.array(xNumber), np.array(axAverage),                             
-                'green',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Ax Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(axValues),                             
+        #         'green',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ax')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(ayAverage),                             
+        plt.plot(np.array(xNumber), np.array(calcRawAngleValues),                             
                 'purple',                       # colour
                 linestyle='--',                    # line style
-                linewidth=1, label='Ay Avg')      # plot label
-
-        plt.plot(np.array(xNumber), np.array(azAverage),                             
-            'black',                       # colour
-            linestyle='--',                    # line style
-            linewidth=1, label='Az Avg')      # plot label
-
-        plt.plot(np.array(xNumber), np.array(totalAccelerationAvg),                             
-            'red',                       # colour
-            linestyle='--',                    # line style
-            linewidth=2, label='Accel Avg')      # plot label
+                linewidth=1, label='Raw Angle Readings')      # plot label
 
         plt.plot(np.array(xNumber), np.array(angleAverage),                             
-                'orange',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Avg Angle Readings')      # plot label
+            'black',                       # colour
+            linestyle='--',                    # line style
+            linewidth=2, label='Filtered Angle Readings')      # plot label
+
+        legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
+
+        # plt.plot(np.array(xNumber), np.array(totalAcceleration),                             
+        #     'red',                       # colour
+        #     linestyle='--',                    # line style
+        #     linewidth=2, label='Total Acceleration')      # plot label
+
+        # plt.plot(np.array(xNumber), np.array(angleAverage),                             
+        #         'orange',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Avg Angle Readings')      # plot label
 
 
 
@@ -410,7 +412,7 @@ def main(argv):
 
         i = 0
         # Grab the values
-        with open("finalDownhill4.txt") as f:
+        with open("thursdownhill1.txt") as f:
                 for line in f:
                         if (len(line) > 1):
                                 splitLine = line.split(",")
@@ -420,9 +422,6 @@ def main(argv):
                                         axValues.append(float(splitLine[1]) * 0.000732)
                                         ayValues.append(float(splitLine[2]) * 0.000732)
                                         azValues.append(float(splitLine[3]) * 0.000732)
-                                        gyValues.append(float(splitLine[4]))
-                                        gzValues.append(float(splitLine[5]))
-                                        angleValues.append(float(splitLine[6])/15)
                                 if (splitLine[0] == "WEIGHTS"):
                                     backwardWeights.append(float(splitLine[1])/20)
                                     forwardWeights.append(float(splitLine[2])/20)
@@ -491,48 +490,57 @@ def main(argv):
 
         plt.figure(1)
 
-        plt.plot(np.array(xNumber), np.array(axAverage),                             
-                'green',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Ax Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(axAverage),                             
+        #         'green',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ax Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(ayAverage),                             
-                'purple',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Ay Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(ayAverage),                             
+        #         'purple',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ay Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(azAverage),                             
-            'black',                       # colour
-            linestyle='--',                    # line style
-            linewidth=1, label='Az Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(azAverage),                             
+        #     'black',                       # colour
+        #     linestyle='--',                    # line style
+        #     linewidth=1, label='Az Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(totalAccelerationAvg),                             
-            'red',                       # colour
-            linestyle='--',                    # line style
-            linewidth=2, label='Accel Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(totalAccelerationAvg),                             
+        #     'red',                       # colour
+        #     linestyle='--',                    # line style
+        #     linewidth=2, label='Accel Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(angleAverage),                             
-                'orange',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Avg Angle Readings')      # plot label
-
-
-
-
-# # ANGLE VALUES
-
-
+        # plt.plot(np.array(xNumber), np.array(angleAverage),                             
+        #         'orange',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Avg Angle Readings')      # plot label
 
 
         plt.xlabel('Time', fontdict=labelfont)
-        plt.title('G readings Downhill', fontdict=titlefont) 
-        plt.ylabel('G', fontdict=labelfont)
+        plt.title('Angle readings Down 5.5 Degree Incline', fontdict=titlefont) 
+        plt.ylabel('Angle', fontdict=labelfont)
         axes = plt.gca()
         axes.set_xlim([0, len(xNumber)])            # x-axis bounds
-        axes.set_ylim([-8, 8])    
+        axes.set_ylim([-6, 6])    
 
-                # x-axis bounds
+        # plt.plot(np.array(xNumber), np.array(axValues),                             
+        #         'green',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ax')      # plot label
+
+        plt.plot(np.array(xNumber), np.array(calcRawAngleValues),                             
+                'purple',                       # colour
+                linestyle='--',                    # line style
+                linewidth=1, label='Raw Angle Readings')      # plot label
+
+        plt.plot(np.array(xNumber), np.array(angleAverage),                             
+            'black',                       # colour
+            linestyle='--',                    # line style
+            linewidth=2, label='Filtered Angle Readings')      # plot label
+
         legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
+
+
 
 
         # DO IT FOR UPHILL
@@ -566,7 +574,7 @@ def main(argv):
 
         i = 0
         # Grab the values
-        with open("finalUphill4.txt") as f:
+        with open("thursuphill1.txt") as f:
                 for line in f:
                         if (len(line) > 1):
                                 splitLine = line.split(",")
@@ -576,9 +584,6 @@ def main(argv):
                                         axValues.append(float(splitLine[1]) * 0.000732)
                                         ayValues.append(float(splitLine[2]) * 0.000732)
                                         azValues.append(float(splitLine[3]) * 0.000732)
-                                        gyValues.append(float(splitLine[4]))
-                                        gzValues.append(float(splitLine[5]))
-                                        angleValues.append(float(splitLine[6])/15)
                                 if (splitLine[0] == "WEIGHTS"):
                                     backwardWeights.append(float(splitLine[1])/20)
                                     forwardWeights.append(float(splitLine[2])/20)
@@ -680,47 +685,53 @@ def main(argv):
 # AVG ACCEL VALUES
         plt.figure(2)
 
-        plt.plot(np.array(xNumber), np.array(axAverage),                             
-                'green',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Ax Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(axAverage),                             
+        #         'green',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ax Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(ayAverage),                             
-                'purple',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Ay Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(ayAverage),                             
+        #         'purple',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ay Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(azAverage),                             
-            'black',                       # colour
-            linestyle='--',                    # line style
-            linewidth=1, label='Az Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(azAverage),                             
+        #     'black',                       # colour
+        #     linestyle='--',                    # line style
+        #     linewidth=1, label='Az Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(totalAccelerationAvg),                             
-            'red',                       # colour
-            linestyle='--',                    # line style
-            linewidth=2, label='Accel Avg')      # plot label
+        # plt.plot(np.array(xNumber), np.array(totalAccelerationAvg),                             
+        #     'red',                       # colour
+        #     linestyle='--',                    # line style
+        #     linewidth=2, label='Accel Avg')      # plot label
 
-        plt.plot(np.array(xNumber), np.array(angleAverage),                             
-                'orange',                       # colour
-                linestyle='--',                    # line style
-                linewidth=1, label='Avg Angle Readings')      # plot label
-
-
-
-
-# ANGLE VALUES
-
-
-
+        # plt.plot(np.array(xNumber), np.array(angleAverage),                             
+        #         'orange',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Avg Angle Readings')      # plot label
 
         plt.xlabel('Time', fontdict=labelfont)
-        plt.title('G readings Uphill', fontdict=titlefont) 
-        plt.ylabel('G', fontdict=labelfont)
+        plt.title('Angle readings Up 3 Degree Incline', fontdict=titlefont) 
+        plt.ylabel('Angle', fontdict=labelfont)
         axes = plt.gca()
         axes.set_xlim([0, len(xNumber)])            # x-axis bounds
-        axes.set_ylim([min-2, max+2])    
+        axes.set_ylim([-6, 6])    
 
-                # x-axis bounds
+        # plt.plot(np.array(xNumber), np.array(axValues),                             
+        #         'green',                       # colour
+        #         linestyle='--',                    # line style
+        #         linewidth=1, label='Ax')      # plot label
+
+        plt.plot(np.array(xNumber), np.array(calcRawAngleValues),                             
+                'purple',                       # colour
+                linestyle='--',                    # line style
+                linewidth=1, label='Raw Angle Readings')      # plot label
+
+        plt.plot(np.array(xNumber), np.array(angleAverage),                             
+            'black',                       # colour
+            linestyle='--',                    # line style
+            linewidth=2, label='Filtered Angle Readings')      # plot label
+
         legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
 
 
