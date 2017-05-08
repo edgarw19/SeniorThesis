@@ -34,7 +34,7 @@ float calibration_factor = 9300; //-7050 worked for my 440lb max scale setup
 int RIDERWEIGHT = 15;
 
 
-/* Set up the throttle connections */
+/* Basic static variables for our algorithm */
 char Dword;
 int dutyRate = 82;
 int rawDutyRate = 82;
@@ -52,7 +52,8 @@ int THRESHOLDPULSEWIDTH = 4;
 int BACKWARDSRANGE = 8;
 double SENSITIVITY = 0.000732;
 double GYROZCALIBRATE = 5.95;
-//change this number with gNumForwardReadings
+
+/* Dynamic global variables for our algorithm */
 double gDutyAverage = 82;
 double gNumForwardReadings = 20;
 double gNumBackwardReadings =8;
@@ -69,7 +70,6 @@ double lastTime = 0;
 double firstRead = true;
 double complementaryFilterFraction = .98;
 double gBoardAngle = 0;
-
 boolean gRiderIsOn = false;
 boolean isBraking = false;
 unsigned long gStartTime = 0;
@@ -82,38 +82,9 @@ double gAccelZ = 1.2;
 double gGyroAverage = 0;
 double gGyroValue = 0;
 
+#define DECLINATION -12 // Declination (degrees) in Princeton
 
-////////////////////////////
-// Sketch Output Settings //
-////////////////////////////
-#define PRINT_CALCULATED
-//#define PRINT_RAW
-#define PRINT_SPEED 1200 // 250 ms between prints
-
-// Earth's magnetic field varies by location. Add or subtract 
-// a declination to get a more accurate heading. Calculate 
-// your's here:
-// http://www.ngdc.noaa.gov/geomag-web/#declination
-#define DECLINATION -12 // Declination (degrees) in Boulder, CO.
-
-
-int findAverage(int readings[]){
-  double average = 0;
-  for (int i = 0; i < gNumForwardReadings; i++){
-//    Serial.print(gDutyAverage[i]);
-    average += readings[i];
-  }
-  return int(average/gNumForwardReadings);
-}
-
-double findDirection(int readings[]){
-  double sum = 0;
-  for (int i = 0; i < gNumForwardReadings; i++){
-    sum += readings[i];
-  }
-  return sum/gNumForwardReadings;
-}
-
+//Low pass filter which takes in the current reading, current 'avg', and sampling rate)
 double lowPassFilter(double currentValue,double average,double fraction){
   double averagedValue = (1 - 1.0/fraction) * average + (1.0/fraction) * currentValue;
   return averagedValue;
@@ -121,17 +92,16 @@ double lowPassFilter(double currentValue,double average,double fraction){
 
 
 
+//Generates averages using algorithm defined in our paper
 double generateAverages(double average, double lastValue,double currentValue,double weighting,double differentialUP,double differentialDOWN,double upperBound,double errorMargin,double subtractNorm){
 
   if (abs(currentValue - lastValue) > differentialUP){
     if ((currentValue - lastValue) > 0){
         currentValue = average;
-//        Serial.println("REMOVED UP");
       }
   }
   else if (abs(currentValue - lastValue) > differentialDOWN){
       if ((currentValue - lastValue) < 0){
-//        Serial.println("REMOVED DOWN");
         currentValue = average;
       }
   }
@@ -146,7 +116,6 @@ double generateAverages(double average, double lastValue,double currentValue,dou
   }
 
   if (abs(currentValue - average) > errorMargin){ 
-//    Serial.println("REMOVED ERROR");
       if ((currentValue - average) > 0 ){
         currentValue  = average + errorMargin;
       }
@@ -158,27 +127,30 @@ double generateAverages(double average, double lastValue,double currentValue,dou
   return averagedValue;
 }
 
+//Slightly different from general averaging algorithm in that stray from the average is completely removed 
 double generateAveragesX(double average, double lastValue,double currentValue,double weighting,double differentialUP,double differentialDOWN,double upperBound,double errorMargin,double subtractNorm){
 
   if (abs(currentValue - lastValue) > differentialUP){
     if ((currentValue - lastValue) > 0){
         currentValue = average;
-//        Serial.println("REMOVED UP");
       }
   }
   else if (abs(currentValue - lastValue) > differentialDOWN){
       if ((currentValue - lastValue) < 0){
-//        Serial.println("REMOVED DOWN");
         currentValue = average;
       }
   }
 
   if (abs(currentValue-subtractNorm) > upperBound){
-      currentValue = upperBound;
+      if ((currentValue-subtractNorm) > 0){
+        currentValue = upperBound;
+      }
+      else {
+        currentValue = -upperBound;
+      }
   }
 
   if (abs(currentValue - average) > errorMargin){ 
-//    Serial.println("REMOVED ERROR");
       if ((currentValue - average) > 0 ){
         currentValue  = average;
       }
@@ -190,6 +162,7 @@ double generateAveragesX(double average, double lastValue,double currentValue,do
   return averagedValue;
 }
 
+//Slightly different from general averaging algorithm in that large differentials are scaled and still affect the average
 double generateAveragesZ(double average, double lastValue,double currentValue,double weighting,double differential,double differentialScaling,double upperBound,double errorMargin,double subtractNorm){
 
   if (abs(currentValue - lastValue) > differential){
@@ -201,7 +174,6 @@ double generateAveragesZ(double average, double lastValue,double currentValue,do
   }
 
   if (abs(currentValue - average) > errorMargin){ 
-//    Serial.println("REMOVED ERROR");
       if ((currentValue - average) > 0 ){
         currentValue  = average + errorMargin;
       }
@@ -249,43 +221,31 @@ void setup()
   Timer1.setPeriod(PERIOD); //initialize timer1, and set a 1/2 second period
   Timer1.pwm(SPEEDPIN, dutyRate); // setup pwm on pin 9, 50% duty cycle
   Timer1.pwm(UNKNOWNPIN, 81);
-  gDutyAverage = 82;
+  gDutyAverage = BASEDUTY;
   Serial.println("FINISHED SET UP");
 }
 
 void updateAccel(){
+    //Read from sensors
     double lastAccelX = imu.ax * SENSITIVITY;
     double lastAccelY = imu.ay* SENSITIVITY;
     double lastAccelZ = imu.az * SENSITIVITY;
     imu.readAccel();
-    imu.readGyro();
     double curAccelX = imu.ax * SENSITIVITY;
     double curAccelY = imu.ay * SENSITIVITY;
     double curAccelZ = imu.az * SENSITIVITY;
 
-//    Serial.println("X_____");
-//    Serial.print("CUR B4 FUNCTION, ");
-//    Serial.println(curAccelX);
+    //Calculate with filter
     gAccelX = generateAveragesX(gAccelX, lastAccelX, curAccelX, 5, .1, .015, .5, .1, 0);
-//    Serial.println(gAccelX);
-//    Serial.println();
-
-//    Serial.println("Z______________");
-    gAccelZ = generateAveragesZ(gAccelZ, lastAccelZ, curAccelZ, 15, .5, .5, 3, .5, 1.2);
-//    Serial.println(gAccelY);
-//    Serial.println();
-//  
-//    Serial.println("Y_____________ ");
+    gAccelZ = generateAveragesZ(gAccelZ, lastAccelZ, curAccelZ, 10, .5, .5, 3, .5, 1.2);
     gAccelY = generateAverages(gAccelY, lastAccelY, curAccelY, 10, 100, 100, 100, 100, 0);
-//    Serial.println(gAccelY);
-//    Serial.println();
 }
 
 
 void loop()
 {
 
-          boolean maxIsForward = true;
+  boolean maxIsForward = true;
  
   //Read the current weight
   double backWeight = backwardScale.get_units() - 10;
@@ -293,26 +253,21 @@ void loop()
   float lastAngle = gBoardAngle;
   updateAccel();
   
+  //Calculate the current angle
   gBoardAngle = calculateAngle(gAccelX, gAccelY, gAccelZ, -imu.my, -imu.mx, imu.mz);
   float testAngle = calculateAngle(imu.ax, imu.ay, imu.az, -imu.my, -imu.mx, imu.mz);
-
-  
-
   gBoardAngleAvg = generateAverages(gBoardAngleAvg, lastAngle, gBoardAngle, 5, 1.5, 1.5, 10, 1.5, 0);
-
-
-
 
   RIDERWEIGHT = forwardWeight + backWeight;
   
 
-                    //MASSIVE PRINT STATEMENT
-                    counter += 1;
+    //Formated Print Statement for data collection
+      counter += 1;
       if (counter % 3 == 0){
       Serial.print("WEIGHTS, ");
       Serial.print(backWeight, 2);
       Serial.print(",");
-      Serial.println(forwardWeight, 2); //scale.get_units() returns a float
+      Serial.println(forwardWeight, 2); 
       Serial.print("DUTY, ");
       Serial.print(dutyRate);
       Serial.print(", ");
@@ -349,7 +304,7 @@ void loop()
   //If rider is on, calculate the right speed
   else {
 
-//angle add
+    //Angle correction to riding experience
    if (gBoardAngleAvg > 1.5) {
       forwardWeight += gUpHillFWDMultiplier * gBoardAngleAvg;
    }
@@ -385,6 +340,7 @@ void loop()
         speedFraction = (maxWeight - .55*RIDERWEIGHT)/(.20*RIDERWEIGHT);
       }
 
+      //Cap the speed fraction
       if (speedFraction > 1) speedFraction = 1.0;
       
       //Calculate the pulse width for forwards and backwards
@@ -465,10 +421,6 @@ void loop()
 
 
 // Calculate pitch, roll, and heading.
-// Pitch/roll calculations take from this app note:
-// http://cache.freescale.com/files/sensors/doc/app_note/AN3461.pdf?fpsp=1
-// Heading calculations taken from this app note:
-// http://www51.honeywell.com/aero/common/documents/myaerospacecatalog-documents/Defense_Brochures-documents/Magnetic__Literature_Application_notes-documents/AN203_Compass_Heading_Using_Magnetometers.pdf
 double calculateAngle(float ax, float ay, float az, float mx, float my, float mz)
 {
   float roll = atan2(ay, az);
